@@ -82,6 +82,7 @@ if __name__ == "__main__":
     main()
 
 '''
+Wynik programu:
 
 Używając list:
 Dla n = 1000, znaleziono 168 liczb pierwszych. Czas: 0.0 sek.
