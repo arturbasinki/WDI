@@ -11,20 +11,25 @@ import numpy as np
 
 # Implementacja Sita Eratostenesa używając listy
 def sito_erastostenesa_list(n):
-    # Inicjalizacja listy
+    # Inicjalizacja listy o długości n+1, gdzie każdy element jest ustawiony na True
     sito = [True] * (n+1)
+    # Rozpoczęcie od pierwszej liczby pierwszej, czyli 2
     p = 2
-    # Szukanie liczb pierwszych od 2 do n
+    # Główna pętla, która działa dopóki kwadrat bieżącej liczby jest mniejszy lub równy n
     while p * p <= n:
+        # Jeśli bieżąca liczba jest nadal zaznaczona jako liczba pierwsza
         if sito[p]:
+            # Wykreśl wszystkie wielokrotności bieżącej liczby
             for i in range(p * p, n+1, p):
                 sito[i] = False
+        # Przejdź do następnej liczby
         p += 1
+    # Zwróć listę wszystkich liczb pierwszych
     return [p for p in range(2, n+1) if sito[p]]
 
 # Implementacja Sita Eratostenesa używając słownika
 def sito_erastostenesa_dict(n):
-    # Inicjalizacja słownika
+    # Inicjalizacja słownika, gdzie kluczem jest liczba, a wartością jest True
     sito = {i: True for i in range(2, n+1)}
     p = 2
     while p * p <= n:
@@ -32,17 +37,23 @@ def sito_erastostenesa_dict(n):
             for i in range(p * p, n+1, p):
                 sito[i] = False
         p += 1
+    # Zwróć listę wszystkich liczb pierwszych
     return [p for p in sito if sito[p]]
 
 # Implementacja Sita Eratostenesa używając tablicy numpy
 def sito_erastostenesa_numpy(n):
-    # Inicjalizacja tablicy numpy
+    # Inicjalizacja tablicy numpy o długości n+1, gdzie każdy element jest ustawiony na True
     sito = np.ones(n+1, dtype=bool)
+    # Ustawienie wartości dla indeksów 0 i 1 na False, ponieważ nie są to liczby pierwsze
     sito[0:2] = False
+    # Obliczenie pierwiastka kwadratowego z n
     N_max = int(np.sqrt(len(sito) - 1))
     for i in range(2, N_max + 1):
+        # Jeśli bieżąca liczba jest nadal zaznaczona jako liczba pierwsza
         if sito[i]:
+            # Wykreśl wszystkie wielokrotności bieżącej liczby
             sito[i**2::i] = False
+    # Zwróć tablicę wszystkich liczb pierwszych
     return np.nonzero(sito)[0]
 
 # Funkcja do obliczania ilości liczb pierwszych i mierzenia czasu wykonania
