@@ -33,7 +33,7 @@ def jest_armstrong(n):
 
 def znajdz_liczby_armstrong():
     # Znajduje i drukuje wszystkie liczby Armstronga w określonym zakresie.
-    for i in range(0, 10**7):  # Zmienić zakres według potrzeb
+    for i in range(0, 10**8):  # Zmienić zakres według potrzeb
         if jest_armstrong(i):
             print(i)
 
@@ -42,3 +42,34 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+'''
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+153
+370
+371
+407
+1634
+8208
+9474
+54748
+92727
+93084
+548834
+1741725
+4210818
+9800817
+9926315
+24678050
+24678051
+88593477
+'''
