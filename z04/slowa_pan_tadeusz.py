@@ -17,7 +17,7 @@ def top_20(filename):
         text = f.read().lower()
     # Znajdź słowa zawierające co najmniej 5 lub więcej znaków
     # używając biblioteki re (Regular Expressions)
-    # Wyrażenie regularne \b\w{5,}\b użyte w programie do wyszukiwania słów uwzględnia sytuacje,
+    # Wyrażenie regularne \b\w{5,}\b użyte w programie, uwzględnia sytuacje,
     # gdy słowo jest zakończone przecinkiem (,) lub kropką (.).
     words = re.findall(r'\b\w{5,}\b', text)
     # Oblicz rozkład słów
