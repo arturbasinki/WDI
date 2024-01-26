@@ -18,7 +18,7 @@ Jeśli tak, to rozwiązuje układ równań za pomocą funkcji numpy.linalg.solve
 Jeśli układ równań jest sprzeczny lub nieoznaczony, funkcja wyświetla odpowiedni komunikat.
 
 Program uruchamia się z wiersza poleceń, podając nazwę pliku jako argument, na przykład:
-python nazwa_programu.py nazwa_pliku.txt.
+$ python nazwa_programu.py nazwa_pliku.txt.
 Należy się upewnić, że plik istnieje w tym samym katalogu, co skrypt Pythona, lub podać pełną ścieżkę do pliku.
 
 '''
@@ -73,7 +73,7 @@ def main():
 
     # Pobierz nazwę pliku z argumentów
     nazwa_pliku = sys.argv[1]
-    
+
     A, B = wczytaj_dane(nazwa_pliku)
     rozwiaz_uklad(A, B)
 
