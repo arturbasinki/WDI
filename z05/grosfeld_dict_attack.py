@@ -1,7 +1,7 @@
 import itertools
 
 # Wczytujemy słownik
-with open('../slownik.txt', 'r') as f:
+with open('slownik.txt', 'r') as f:
     # Tworzymy zbiór wszystkich słów w słowniku, usuwając białe znaki na początku i na końcu każdego słowa
     dictionary = set(word.strip() for word in f)
 
