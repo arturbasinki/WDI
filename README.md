@@ -28,7 +28,7 @@
     lub, się, aby, żeby , itp. Proszę podać wyniki dla tekstu „Pana Tadeusza”.
 5. Komputer jest doskonałym narzędziem służącym do szyfrowania i deszyfrowania tajnych
     wiadomości. W metodzie Gronsfelda, będącą modyfikacją szyfru Cezara, stosuje się klucz liczbowy.
-    Biorąc klucz o wartości 31206 3 i niezaszyfrowany tekst „computer science”, uzyskujemy następujący
+    Biorąc klucz o wartości 312063 i niezaszyfrowany tekst „computer science”, uzyskujemy następujący
     szyfrogram:
     3120633120633120
     computer science
