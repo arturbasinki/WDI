@@ -45,7 +45,7 @@ def break_gronsfeld_key(encrypted_message, key):
     if sum(word in dictionary for word in words) / len(words) > 0.8:
         # Jeśli tak, zwracamy odszyfrowaną wiadomość i klucz
         return decrypted_message, key
-    # Jeśli mniej niż 50% słów pasuje, zwracamy None
+    # Jeśli mniej niż 80% słów pasuje, zwracamy None
     return None, None
 
 # Generator wszystkich możliwych kluczy
