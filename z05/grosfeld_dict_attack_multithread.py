@@ -13,6 +13,14 @@ with open('slownik.txt', 'r') as f:
 
 # Funkcja deszyfrująca
 def gronsfeld_decrypt(encrypted_message, key):
+    """
+    Deszyfruje zaszyfrowaną wiadomość za pomocą szyfru Gronsfelda.
+
+    :param encrypted_message: str, Wiadomość do odszyfrowania.
+    :param key: str, Klucz używany do deszyfrowania.
+
+    :return: str, Odszyfrowana wiadomość.
+    """
     # Definiujemy alfabet, który będzie używany do deszyfrowania
     alphabet = ' abcdefghijklmnopqrstuvwxyz'
     # Inicjalizujemy pusty ciąg, który będzie przechowywał odszyfrowaną wiadomość
@@ -36,6 +44,13 @@ def gronsfeld_decrypt(encrypted_message, key):
 
 # Funkcja łamiąca szyfr dla danego klucza
 def break_gronsfeld_key(encrypted_message, key):
+    """
+    Funkcja do złamania klucza Gronsfelda dla zaszyfrowanej wiadomości.
+    
+    :param encrypted_message (str): Zaszyfrowana wiadomość do odszyfrowania.
+    :param key (int): Klucz używany do odszyfrowania.
+    :returns: tuple: Krotka zawierająca odszyfrowaną wiadomość i klucz, jeśli co najmniej 80% słów w odszyfrowanej wiadomości znajduje się w słowniku, w przeciwnym razie zwraca None.
+    """
     key = str(key)
     # Deszyfrujemy wiadomość za pomocą danego klucza
     decrypted_message = gronsfeld_decrypt(encrypted_message, key)
@@ -61,14 +76,12 @@ def generate_keys():
 # 1000 kluczy jednocześnie. Jeśli zostanie znaleziony pasujący klucz, zwraca wynik.
 # Jeśli żaden klucz nie pasuje, zwraca None.
 def break_gronsfeld(encrypted_message):
-    '''
-    
-    Funkcja break_gronsfeld
+    """
+    Funkcja do złamania szyfru Gronsfelda dla podanej wiadomości.
 
-    :param encrypted_message: zaszyfrowana wiadomość
-    :return: odszyfrowana wiadomość i klucz, jeśli mniej niż 80% słów pasuje do słownika, zwraca None
-    '''
-
+    :param encrypted_message: Zaszyfrowana wiadomość do odszyfrowania.
+    :return: Krotka zawierająca odszyfrowaną wiadomość i klucz użyty do odszyfrowania. Jeśli żaden klucz nie pasuje, zwraca (None, None).
+    """
     with multiprocessing.Pool() as pool:
         for i in range(1000000):
             #Obliczamy 1000 kluczy i po wykonaniu sprawdzamy wyniki
