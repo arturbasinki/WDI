@@ -56,9 +56,19 @@ def generate_keys():
             # Zwracamy kolejny klucz
             yield ''.join(p)
 
-# Funkcja łamiąca szyfr
+# Ten fragment kodu definiuje funkcję break_gronsfeld, która wykorzystuje przetwarzanie wieloprocesorowe
+# do utworzenia puli procesów. Następnie iteruje po zakresie liczb i wykorzystuje pulę do obliczenia
+# 1000 kluczy jednocześnie. Jeśli zostanie znaleziony pasujący klucz, zwraca wynik.
+# Jeśli żaden klucz nie pasuje, zwraca None.
 def break_gronsfeld(encrypted_message):
-    # Tworzymy pool procesów 
+    '''
+    
+    Funkcja break_gronsfeld
+
+    :param encrypted_message: zaszyfrowana wiadomość
+    :return: odszyfrowana wiadomość i klucz, jeśli mniej niż 80% słów pasuje do słownika, zwraca None
+    '''
+
     with multiprocessing.Pool() as pool:
         for i in range(1000000):
             #Obliczamy 1000 kluczy i po wykonaniu sprawdzamy wyniki
