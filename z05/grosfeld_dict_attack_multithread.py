@@ -1,6 +1,6 @@
 import itertools
-import concurrent.futures
 import logging
+import multiprocessing
 
 # Ustawiamy poziom logowania na INFO, aby wyświetlać wszystkie informacje o przebiegu programu
 logging.basicConfig(level=logging.INFO)
@@ -35,14 +35,16 @@ def gronsfeld_decrypt(encrypted_message, key):
 
 # Funkcja łamiąca szyfr dla danego klucza
 def break_gronsfeld_key(encrypted_message, key):
+    key = str(key)
     # Deszyfrujemy wiadomość za pomocą danego klucza
     decrypted_message = gronsfeld_decrypt(encrypted_message, key)
-    # Sprawdzamy, czy wszystkie słowa w odszyfrowanej wiadomości są w słowniku
-    if all(word in dictionary for word in decrypted_message.split()):
+    # Sprawdzamy, czy przynajmniej 80% słów w odszyfrowanej wiadomości jest w słowniku
+    # pozwoli to na złamanie szyfrogramu dla słów nie będących w słowniku, np z powodu deklinacji
+    words = decrypted_message.split()
+    if sum(word in dictionary for word in words) / len(words) > 0.8:
         # Jeśli tak, zwracamy odszyfrowaną wiadomość i klucz
         return decrypted_message, key
-
-    # Jeśli żaden klucz nie pasuje, zwracamy None
+    # Jeśli mniej niż 50% słów pasuje, zwracamy None
     return None, None
 
 # Generator wszystkich możliwych kluczy
@@ -55,18 +57,13 @@ def generate_keys():
 
 # Funkcja łamiąca szyfr
 def break_gronsfeld(encrypted_message):
-    # Tworzymy pulę wątków za pomocą ThreadPoolExecutor
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        # Dla każdego możliwego klucza, uruchamiamy funkcję break_gronsfeld_key w osobnym wątku
-        futures = {executor.submit(break_gronsfeld_key, encrypted_message, key): key for key in generate_keys()}
-        # Czekamy, aż którykolwiek z wątków zakończy swoje działanie
-        for future in concurrent.futures.as_completed(futures):
-            # Pobieramy wynik zakończonego wątku
-            result = future.result()
-            # Jeśli wynik nie jest None, oznacza to, że znaleźliśmy poprawny klucz
-            if result is not None:
-                # Zwracamy odszyfrowaną wiadomość i klucz
-                return result
+    # Tworzymy pool procesów 
+    with multiprocessing.Pool() as pool:
+        for i in range(1000000):
+            #Obliczamy 1000 kluczy i po wykonaniu sprawdzamy wyniki
+            for result in pool.starmap(break_gronsfeld_key, list(zip((encrypted_message for _ in range(1000)), range(1000*i, 1000*(i+1))))):
+                if result[0] is not None:
+                    return result
 
     # Jeśli żaden klucz nie pasuje, zwracamy None
     return None, None
@@ -74,8 +71,15 @@ def break_gronsfeld(encrypted_message):
 def main():
     # Przykładowe użycie
     encrypted_message = 'axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh'
+    # encrypted_message = 'jhowwrhwilhxiodkydfrhiapkfrlx zhjxsuuyiyoug'
+    # encrypted_message = 'fpop whsbsilhoee'
     decrypted_message, key = break_gronsfeld(encrypted_message)
     print(f'Odszyfrowana wiadomość: {decrypted_message}, Klucz: {key}')
 
 if __name__ == '__main__':
     main()
+
+    '''
+    
+    Odszyfrowana wiadomość:  there is no use crying over spilt milk , Klucz: 142807
+    '''
