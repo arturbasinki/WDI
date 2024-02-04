@@ -1,6 +1,7 @@
 import itertools
 import logging
 import multiprocessing
+import time
 
 # Ustawiamy poziom logowania na INFO, aby wyświetlać wszystkie informacje o przebiegu programu
 logging.basicConfig(level=logging.INFO)
@@ -69,17 +70,25 @@ def break_gronsfeld(encrypted_message):
     return None, None
 
 def main():
+    start = time.time()
     # Przykładowe użycie
     encrypted_message = 'axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh'
-    # encrypted_message = 'jhowwrhwilhxiodkydfrhiapkfrlx zhjxsuuyiyoug'
     # encrypted_message = 'fpop whsbsilhoee'
     decrypted_message, key = break_gronsfeld(encrypted_message)
-    print(f'Odszyfrowana wiadomość: {decrypted_message}, Klucz: {key}')
+    print(f'Szyfrogram: {encrypted_message}')
+    print(f'Tekst jawny: {decrypted_message}, Klucz: {key}')
+    print(f'Czas trwania: {time.time() - start}')
 
 if __name__ == '__main__':
     main()
 
-    '''
+'''
     
-    Odszyfrowana wiadomość:  there is no use crying over spilt milk , Klucz: 142807
-    '''
+Szyfrogram: fpop whsbsilhoee
+Tekst jawny: computer science, Klucz: 312063
+Czas trwania: 0.6394965648651123
+
+Szyfrogram: axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh
+Tekst jawny:  there is no use crying over spilt milk , Klucz: 142807
+Czas trwania: 0.5416271686553955Czas trwania: 0.5453438758850098
+'''
