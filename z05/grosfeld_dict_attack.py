@@ -1,4 +1,5 @@
 import itertools
+import time
 
 # Wczytujemy słownik
 with open('slownik.txt', 'r') as f:
@@ -31,14 +32,17 @@ def gronsfeld_decrypt(encrypted_message, key):
 # Funkcja łamiąca szyfr
 def break_gronsfeld(encrypted_message):
     # Generujemy wszystkie możliwe klucze o długości mniejszej niż 10
-    possible_keys = [''.join(p) for i in range(1, 10) for p in itertools.product('0123456789', repeat=i)]
+    possible_keys = (''.join(p) for i in range(1, 10) for p in itertools.product('0123456789', repeat=i))
 
     # Iterujemy przez wszystkie możliwe klucze
     for key in possible_keys:
         # Deszyfrujemy wiadomość za pomocą danego klucza
         decrypted_message = gronsfeld_decrypt(encrypted_message, key)
-        # Sprawdzamy, czy wszystkie słowa w odszyfrowanej wiadomości są w słowniku
-        if all(word in dictionary for word in decrypted_message.split()):
+        words = decrypted_message.split()
+        # Sprawdzamy, czy conajmniej 80% odszyfrowanych słóœ znajduje się w słowniku
+        # co pozwala na złamanie szyfrogramu dla słów nie będąsych w słowniku z powodu np deklinacji 
+        # czy casu innego niż teraźniejszy
+        if sum(word in dictionary for word in words) / len(words) > 0.8:
             # Jeśli tak, zwracamy odszyfrowaną wiadomość i klucz
             return decrypted_message, key
 
@@ -46,10 +50,22 @@ def break_gronsfeld(encrypted_message):
     return None, None
 
 def main():
+    start = time.time()
     # Przykładowe użycie
     encrypted_message = 'axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh'
+    # encrypted_message = 'fpop whsbsilhoee'
     decrypted_message, key = break_gronsfeld(encrypted_message)
     print(f'Odszyfrowana wiadomość: {decrypted_message}, Klucz: {key}')
+    print(f'Czas trwania: {time.time() - start}')
 
 if __name__ == '__main__':
     main()
+
+'''
+
+Odszyfrowana wiadomość: computer science, Klucz: 312063
+Czas trwania: 2.478550910949707
+
+Odszyfrowana wiadomość:  there is no use crying over spilt milk , Klucz: 142807
+Czas trwania: 3.5992813110351562
+'''
