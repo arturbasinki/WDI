@@ -53,3 +53,17 @@ def solve_equation(equation):
 # Wczytaj równanie z klawiatury
 equation = input("Podaj równanie w postaci literowej: ")
 solve_equation(equation)
+
+
+""""
+
+Podaj równanie w postaci literowej: ABC * BD = EFGAH
+269 * 67 = 18023
+623 * 29 = 18067
+784 * 83 = 65072
+648 * 45 = 29160
+785 * 82 = 64370
+268 * 65 = 17420
+267 * 69 = 18423
+529 * 26 = 13754
+"""
