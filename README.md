@@ -29,10 +29,10 @@
 5. Komputer jest doskonałym narzędziem służącym do szyfrowania i deszyfrowania tajnych
     wiadomości. W metodzie Gronsfelda, będącą modyfikacją szyfru Cezara, stosuje się klucz liczbowy.
     Biorąc klucz o wartości 312063 i niezaszyfrowany tekst „computer science”, uzyskujemy następujący
-    szyfrogram:  
-    3120633120633120
-    computer science
-    fpop whsbsilhoee
+    szyfrogram:   
+    3120633120633120   
+    computer science  
+    fpop whsbsilhoee  
     Kolejne litery są przesuwane o kolejne wartości z klucza. Alfabet użyty w systemie zawiera spacje i 26
     małych liter alfabetu angielskiego. Proszę napisać programy dokonujące szyfrowania i deszyfrowania
     pliku tekstowego zadanym kluczem. Następnie proszę napisać program łamiący ten szyfr. Korzystając
