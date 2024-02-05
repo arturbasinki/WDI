@@ -1,3 +1,13 @@
+"""
+
+Program służy do rysowania wykresów funkcji jednej zmiennej podanych przez użytkownika.
+Program używa bibliotek sympy, numpy i matplotlib do obliczeń symbolicznych, numerycznych
+i wizualizacji danych. Program pozwala na sprawdzenie poprawności wzoru funkcji,
+obliczenie wartości funkcji dla podanego przedziału argumentów i narysowanie wykresu funkcji
+z etykietami osi i tytułem. Program uwzględnia istnienie asymptot pionowych i przerwanie
+linii wykresu w tych miejscach.
+"""
+
 # Importujemy potrzebne moduły
 import sympy
 import numpy as np
