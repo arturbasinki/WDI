@@ -13,6 +13,7 @@ Ten program generuje zagadkę Sudoku, która ma tylko jedno rozwiązanie.
     Jeśli tak, program zwraca planszę jako wynik. W przeciwnym razie, proces generowania jest powtarzany.
 """
 
+import os
 import random
 from tqdm import tqdm
 
@@ -63,7 +64,7 @@ def generuj_sudoku():
     for i in range(9):
         for j in range(9):
             # Z prawdopodobieństwem 30% wypełnia pole losową liczbą
-            if random.random() < 0.3:
+            if random.random() < 0.21:
                 liczba = generuj_liczbe(i, j, sudoku)
                 sudoku[i][j] = liczba
             else:
@@ -105,12 +106,19 @@ def ma_jedno_rozwiazanie(plansza):
 
 # Główna funkcja
 def main():
+    # Czyszczenie ekranu przed wygenerowaniem planszy i paska postępu w zależności od sytemu operacyjnego
+    os.system('cls' if os.name == 'nt' else 'clear')
     print("Generowanie zagadki Sudoku. Pasek postępu pokazuje liczbę prób generowania planszy z jednym rozwiązaniem.")
     # Generowanie sudoku
     liczba_prob = 0
-    pbar = tqdm(total=100)  # Inicjalizacja paska postępu
+    # Inicjalizacja paska postępu
+    pbar = tqdm(total=100)
     while True:
         liczba_prob += 1
+        # Aktualizacja paska postępu
+        pbar.update(1)
+        # Wymusza aktualizację paska postępu
+        pbar.refresh()
         sudoku, liczba_pustych_pol = generuj_sudoku()
         kopia_planszy = [row[:] for row in sudoku]
         # Jeśli sudoku ma tylko jedno rozwiązanie, przerywa pętlę
@@ -119,13 +127,11 @@ def main():
             pbar.close()  
             break
 
-        # Aktualizacja paska postępu
-        pbar.update(1)
 
     print("\nWygenerowana plansza:\n")
     # Wyświetlanie sudoku
     for wiersz in sudoku:
-        print(" ".join(map(str, wiersz)))
+        print(" ".join(str(liczba) if liczba != 0 else "." for liczba in wiersz))
 
     print(f"\nLiczba pustych pól: {liczba_pustych_pol}")
     print(f"Liczba prób: {liczba_prob}")
