@@ -55,7 +55,7 @@ def rozwiaz_uklad(A, B):
             raise ValueError("Macierz A musi być macierzą kwadratową.")
         # Sprawdź, czy wymiary macierzy A i wektora B są zgodne
         if A.shape[0] != B.shape[0]:
-            raise ValueError("Wymiary macierzy A i wektora b muszą być zgodne.")
+            raise ValueError("Wymiary macierzy A i wektora B muszą być zgodne.")
         x = np.linalg.solve(A, B)
         print("Rozwiązanie układu równań to:", x)
     except ValueError as ve:
