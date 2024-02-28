@@ -1,3 +1,16 @@
+"""
+Ten skrypt służy do łamania szyfru Gronsfelda. Szyfr Gronsfelda jest szyfrem przesunięcia, podobnym do szyfru Cezara, ale z tą różnicą, że każda litera w tekście jest przesuwana o inną wartość, zgodnie z cyframi klucza.
+
+Program wczytuje słownik słów, a następnie generuje wszystkie możliwe klucze o długości mniejszej niż 10. Dla każdego klucza, program deszyfruje wiadomość i sprawdza, czy co najmniej 80% odszyfrowanych słów znajduje się w słowniku. Jeśli tak, program zwraca odszyfrowaną wiadomość i klucz.
+
+Funkcje używane w skrypcie to:
+
+- `gronsfeld_decrypt`: Deszyfruje wiadomość za pomocą danego klucza.
+- `break_gronsfeld`: Łamie szyfr Gronsfelda, generując wszystkie możliwe klucze i sprawdzając, który z nich pasuje do zaszyfrowanej wiadomości.
+
+Przykładowe użycie programu pokazuje, jak łamać szyfr dla dwóch różnych zaszyfrowanych wiadomości. Dla każdej wiadomości, program zwraca odszyfrowaną wiadomość i klucz, a także czas trwania procesu łamania szyfru.
+"""
+
 import itertools
 import time
 
