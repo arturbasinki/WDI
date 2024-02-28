@@ -79,3 +79,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+>> Użycie: python nazwa_programu.py nazwa_pliku.txt
+
+>> python3 n_equation_solver.py equations.txt
+
+>> Rozwiązanie układu równań to: [ 18. -58.  35.]
+"""
