@@ -1,5 +1,69 @@
 **Zadania do samodzielnego rozwiązania**
 
+---
+
+## Rozwiązanie w Go + jednorodna strona WWW
+
+Wszystkie 8 zadań zostało przepisanych **od nowa w Go** (Go 1.25, wyłącznie biblioteka standardowa —
+zero zależności zewnętrznych) i zaprezentowane jako **jedna strona WWW**: startowy ekran z 8
+kafelkami, każdy prowadzący do graficznej, interaktywnej implementacji zadania. Całość (kod Go,
+frontend HTML/CSS/JS, „Pan Tadeusz” i słownik angielski) jest wbudowana w **jeden plik binarny**
+(`go:embed`) — nie ma plików konfiguracyjnych ani zasobów do kopирования.
+
+### Uruchomienie
+
+```bash
+go build -o bin/wdi-server ./cmd/wdi-server   # jeden binarny plik
+./bin/wdi-server                              # http://localhost:8080
+```
+
+Testy (wszystkie pakiety, ~5 s; tryb `-short` ~1 s):
+
+```bash
+go test ./internal/...        # pełny zestaw
+go test -short ./internal/... # szybki zestaw (bez ciękich przeszukiwań)
+```
+
+### Struktura
+
+| katalog | zawartość |
+|---|---|
+| `internal/z01` | Gauss-Jordan z wyborem wiodącego + nagrywanie kroków (animacja RREF) |
+| `internal/z02` | Armstronga: przeszukiwanie blokami, 12 gorutyn, do 10¹² |
+| `internal/z03` | sito w `[]bool` / `map[int]bool` / bitmapie + benchmark |
+| `internal/z04` | top-N słów (≥ 5 liter), „Pan Tadeusz” wbudowany (go:embed) |
+| `internal/z05` | Gronsfeld: szyfruj/deszyfruj + atak słownikowy (go:embed słownik, 25 991 słów) |
+| `internal/z06` | własny parser wyrażeń (wstęp rekurencyjny) + wykres z asymptotami |
+| `internal/z07` | zagadki literowo-cyfrowe: wyczerpujące 10Pₖ z cięciami |
+| `internal/z08` | sudoku: generacja + kopanie dołków z gwarancją unikalności |
+| `cmd/wdi-server` | serwer HTTP (stdlib) + API JSON + wbudowany frontend |
+| `cmd/wdi-server/web` | frontend: vanilla JS (hash routing) + SVG, zero build |
+
+Ciężkie obliczenia (szukanie Armstronga, benchmark sita, atak na Gronsfelda) działają jako
+**joby tła**: `POST` zwraca `jobId`, `GET` odpytuje postęp/wynik, `DELETE` anuluje.
+
+### Zweryfikowane wyniki
+
+- **z01**: przykład z zadania → `x=18, y=-58, z=35` (układ jednoznaczny); rozpoznawane układy
+  sprzeczne i nieoznaczone (rozwiązanie parametryczne).
+- **z02**: 41 liczb Armstronga do 10¹² — pełna lista zweryfikowana wyczerpującym przeszukiwaniem
+  (31 min na 12 gorutynach); wartości ≤ 10⁹ pokrywają testy jednostkowe.
+- **z03**: liczby pierwsze zgodne z wartościami referencyjnymi (168 / 1229 / 9592 / 78 498 /
+  664 579 / 5 761 455); dla n = 10⁷: wycinek ~46 ms, bitmapa ~45 ms, mapa ~4 s.
+- **z04**: top 3 dla „Pana Tadeusza”: *rzekł* 155, *tylko* 149, *hrabia* 129 (zgodne z Pythonem).
+- **z05**: klucz 312063 → „computer science” = „fpop whsbsilhoee”; przysłowie z zadania złamane
+  atakiem słownikowym: klucz **142807**, „there is no use crying over spilt milk” (253 918 kluczy).
+- **z06**: `1/x` rysowany jako dwie gałęzie z asymptotą x ≈ 0; `tan(x)` — 4 asymptoty na [−6.3, 6.3].
+- **z07**: `ABC·BD=EFGAH` — 8 rozwiązań (m.in. 623·29=18067); `SEND+MORE=MONEY` — jedno
+  (9567+1085=10652).
+- **z08**: generowane zagadki (np. seed 42: 56 pól pustych) mają dokładnie **jedno** rozwiązanie —
+  weryfikowane niezależnie (Python) i przez zliczacz rozwiązań w Go.
+
+Opis rozwiązania każdego zadania znajduje się na jego stronie WWW (panel „Opis rozwiązania”),
+komentarze w kodzie są po polsku, a wyniki można wywołać interaktywnie.
+
+---
+
 1. Proszę napisać program rozwiązujący układ równań N równań liniowych o N niewiadomych.
     Dane dla problemu należy wczytać z pliku tekstowego. W pierwszym wierszu znajduje się liczba
     równań N, kolejne wiersze zawierają macierz współczynników oraz wyrazy wolne, na przykład plik:
