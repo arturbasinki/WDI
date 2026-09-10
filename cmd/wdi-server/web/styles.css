@@ -241,6 +241,19 @@ textarea {
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .row > * { flex: 1 1 160px; }
 
+/* pasek narzędzi: pole formularza + zestaw przycisków w jednej linii.
+   Uwaga: NIE zagnieżdżać .actions w .row — reguła .row > * (flex: 1 1 160px)
+   rozpycha dzieci i przyciski zawijają się w wąską kolumnę. */
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.toolbar > .fld { flex: 0 0 150px; }
+.toolbar > .fld .field { margin-top: 0; }
+.toolbar > .actions { margin-top: 0; margin-left: auto; justify-content: flex-end; }
+
 .btn {
   display: inline-flex;
   align-items: center;

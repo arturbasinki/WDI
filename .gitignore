@@ -167,3 +167,6 @@ screenshots/
 
 # katalog pomocniczy weryfikacji w przeglądarce
 .ab-tmp/
+
+# narzędzia weryfikacji w przeglądarce
+.verify/

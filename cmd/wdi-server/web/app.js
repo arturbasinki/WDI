@@ -961,21 +961,21 @@ VIEWS.z08 = (view) => {
   Powtarzamy, aż żadne pole nie da się usunąć: zagadka ma <b>dokładnie jedno rozwiązanie i maksymalną
   liczbę pustych pól</b>. Kliknij puste pole i wpisz cyfrę (klawiatura), a potem sprawdź lub poproś o rozwiązanie.</p>`, "Opis rozwiązania")}
   ${panel(`
-  <div class="flex-between">
-    <div class="muted">Zagadka generowana w Go (seed opcjonalny):</div>
-    <div class="row" style="flex:0">
-      <div style="flex:0 1 130px"><label class="field">seed (0 = losowy)</label><input type="number" id="seed" value="0"></div>
-      <div class="actions" style="margin-top:26px">
-        <button class="btn" id="gen">Generuj</button>
-        <button class="btn ghost" id="show" type="button">Pokaż rozwiązanie</button>
-        <button class="btn ghost" id="clear" type="button">Wyczyść wpisy</button>
-        <button class="btn ghost" id="check" type="button">Sprawdź / rozwiąż</button>
-      </div>
+  <div class="toolbar">
+    <div class="fld">
+      <label class="field" for="seed">seed (0 = losowy)</label>
+      <input type="number" id="seed" value="0">
+    </div>
+    <div class="actions">
+      <button class="btn" id="gen">Generuj</button>
+      <button class="btn ghost" id="show" type="button">Pokaż rozwiązanie</button>
+      <button class="btn ghost" id="clear" type="button">Wyczyść wpisy</button>
+      <button class="btn ghost" id="check" type="button">Sprawdź / rozwiąż</button>
     </div>
   </div>
   <div class="kv" id="stats"></div>
   <div id="grid"></div>
-  <div class="legend">kliknij puste pole → cyfra 1–9 (Backspace usuwa) · szary = wskazówka, akcent = Twój wpis</div>`)}
+  <div class="legend">kliknij puste pole → cyfra 1–9 (Backspace usuwa) · szary = wskazówka, akcent = Twój wpis</div>`, "Zagadka 9×9 (generowana w Go)")}
   ${panel(`
   <label class="field">Własna plansza: 9 wierszy × 9 cyfr (0 = puste pole)</label>
   <textarea id="own" rows="9" style="min-height:150px" placeholder="np. 000700000&#10;000005002&#10;700980003&#10;000000000&#10;010500090&#10;006430805&#10;090650000&#10;004009360&#10;008003010"></textarea>
