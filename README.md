@@ -12,10 +12,28 @@ frontend HTML/CSS/JS, „Pan Tadeusz” i słownik angielski) jest wbudowana w *
 
 ### Uruchomienie
 
+Natywne (Go ≥ 1.25.6):
+
 ```bash
 go build -o bin/wdi-server ./cmd/wdi-server   # jeden binarny plik
 ./bin/wdi-server                              # http://localhost:8080
 ```
+
+Docker (zalecane — zero zależności na hoście):
+
+```bash
+docker compose up --build -d    # buduje obraz (2 etapy) i startuje kontener
+# → http://localhost:8080
+docker compose down             # stop
+
+# lub bez compose:
+docker build -t wdi:latest .
+docker run --rm -p 8080:8080 wdi:latest
+```
+
+Obraz: dwuwarstwowy (budowa `golang:1.25.6` → runtime `alpine:3.20`, użytkownik
+nie-root, `CGO_ENABLED=0`), wszystko wbudowane w binarny plik przez `go:embed`,
+healthcheck na `/api/tasks`. Zmiana portu: edycja mapowania w `docker-compose.yml`.
 
 Testy (wszystkie pakiety, ~5 s; tryb `-short` ~1 s):
 

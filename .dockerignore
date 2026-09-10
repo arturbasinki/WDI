@@ -1,0 +1,22 @@
+# kontekst budowy — tylko to, czego potrzebuje Dockerfile
+.git/
+.gocache/
+.gopath/
+bin/
+screenshots/
+.verify/
+.ab-tmp/
+Dockerfile
+docker-compose.yml
+README.md
+
+# oryginalne wersje Python zadań (z01–z08) — materiał referencyjny,
+# nie jest częścią serwera Go i nie trafia do obrazu
+z01/
+z02/
+z03/
+z04/
+z05/
+z06/
+z07/
+z08/

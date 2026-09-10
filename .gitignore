@@ -170,3 +170,6 @@ screenshots/
 
 # narzędzia weryfikacji w przeglądarce
 .verify/
+
+# stan CLI dockera (buildx) przekierowany do workspace
+.home/

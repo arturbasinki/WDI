@@ -1,0 +1,26 @@
+# WDI — serwer WWW z rozwiązaniami 8 zadań (Go)
+#
+#   docker compose up --build -d     # zbuduj obraz i uruchom
+#   → http://localhost:8080
+#
+# Zmiana portu: edytuj lewą stronę mapowania "HOST:KONTENER", np. "9000:8080".
+
+services:
+  wdi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wdi:latest
+    container_name: wdi
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+    restart: unless-stopped
+    healthcheck:
+      # busybox wget z alpine' — /api/tasks jest najtańszym endpointem
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/tasks"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
