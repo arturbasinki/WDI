@@ -100,6 +100,8 @@ function jobBox() {
 function startJob(el, jobId, cancelUrl) {
   const box = $(".jobbox", el);
   box.hidden = false;
+  const acts = $(".actions", box);
+  acts.hidden = false; // box jest współdzielony między uruchomieniami
   $(".cancel-btn", box).onclick = async () => {
     try { await fetch(cancelUrl, { method: "DELETE" }); } catch (_) {}
   };
@@ -111,6 +113,15 @@ function startJob(el, jobId, cancelUrl) {
     const pct = $(".pct", box);
     if (s.status === "done" || s.status === "error" || s.status === "cancelled") {
       stopPollers();
+      // job zakończony: chowamy „Przerwij”, pokazujemy stan końcowy
+      acts.hidden = true;
+      if (s.status === "done") {
+        bar.style.width = "100%";
+        pct.textContent = "100 %";
+        what.textContent = "zakończono";
+      } else {
+        what.textContent = s.status === "cancelled" ? "przerwano" : "błąd";
+      }
       onJobSettled(s);
     } else if (s.progress) {
       renderProgress(s.progress);
@@ -511,22 +522,29 @@ VIEWS.z03 = (view) => {
       html += `<div class="kv"><span>dla n = 10${sup(Math.log10(maxN))}: <b>${fmtInt(counts[0])}</b> liczb pierwskich (wszystkie struktury zgadzają się)</span></div>`;
     }
 
-    // wykres porównawczy (log)
-    html += `<h4 class="mt14">Czasy działania (logarytmicznie, sekundy)</h4><div class="bars">`;
+    // wykres porównawczy — skala logarytmiczna, 100% = najwolniejsza struktura
+    html += `<h4 class="mt14">Czasy działania</h4>
+      <div class="muted">Dla każdego n paski odniesione są do <b>najwolniejszej</b> struktury (= 100%);
+      najszybsza = 0%. Skala jest logarytmiczna, bo różnice sięgają dwóch rzędów wielkości
+      (np. 10⁷: mapa 3,87 s vs wycinek 40 ms) — w skali liniowej szybsze struktury byłyby
+      niewidoczne. Wartości bezwzględne podane po prawej.</div>
+      <div class="bars">`;
     for (const n of ns) {
-      html += `<div class="muted" style="margin-top:10px">n = 10${sup(Math.log10(n))}</div>`;
+      html += `<div class="muted" style="margin-top:14px">n = 10${sup(Math.log10(n))}</div>`;
       const vals = structures
         .map((sName) => ({ name: sName, v: byN[n][sName] ? byN[n][sName].seconds : 0 }))
         .filter((x) => x.v > 0);
       if (!vals.length) continue;
-      const logMin = Math.log10(Math.min(...vals.map((v) => v.v)) * 0.6);
-      const logMax = Math.log10(Math.max(...vals.map((v) => v.v)) * 1.6);
+      const vmin = Math.min(...vals.map((x) => x.v));
+      const vmax = Math.max(...vals.map((x) => x.v));
       for (const v of vals) {
-        const frac = (Math.log10(v.v) - logMin) / (logMax - logMin);
+        // 0% = najszybsza, 100% = najwolniejsza (odniesienie), interpolacja logarytmiczna
+        const frac = vmax > vmin ? Math.log10(v.v / vmin) / Math.log10(vmax / vmin) : 1;
+        const col = structColor[v.name];
         html += `<div class="barrow logscale">
           <span class="pos"></span>
-          <span class="word" style="color:${structColor[v.name]}">${esc(v.name)}</span>
-          <span class="track"><span class="fill" style="width:${(100 * Math.max(0.02, Math.min(1, frac))).toFixed(1)}%"></span></span>
+          <span class="word" style="color:${col}">${esc(v.name)}</span>
+          <span class="track"><span class="fill" style="width:${(100 * Math.max(0.02, Math.min(1, frac))).toFixed(1)}%;background:linear-gradient(90deg, color-mix(in srgb, ${col} 35%, #10141c), ${col})"></span></span>
           <span class="cnt">${fmtSec(v.v)}</span>
         </div>`;
       }

@@ -385,18 +385,22 @@ table.data tr:last-child td { border-bottom: none; }
 .barrow .track {
   height: 18px;
   background: #10141c;
+  border: 1px solid var(--border-soft);
   border-radius: 6px;
   overflow: hidden;
 }
 .barrow .fill {
+  display: block; /* <span> jest domyślnie inline — bez tego width/height są ignorowane! */
   height: 100%;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 75%, #0b0e13), var(--accent));
-  border-radius: 6px;
+  border-radius: 5px;
   min-width: 2px;
 }
 .barrow .cnt { font-family: var(--mono); color: var(--muted); text-align: right; font-size: 12.5px; }
 
-.barrow.logscale .fill { background: linear-gradient(90deg, #2b3648, color-mix(in srgb, var(--accent) 70%, #0b0e13)); }
+/* pasek w skali logarytmicznej — kolor struktury nadawany inline (styles.css nie
+   zna nazw struktur), tu tylko bezpieczny fallback */
+.barrow.logscale .fill { background: linear-gradient(90deg, #3a4a63, var(--accent)); }
 
 /* ---------- macierz (z01) ---------- */
 
