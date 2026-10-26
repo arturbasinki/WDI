@@ -13,9 +13,12 @@
 //
 // Atak słownikowy wylicza kolejne kandydackie klucze (1-cyfrowe,
 // 2-cyfrowe, ...), odszyfrowuje nimi szyfrogram i sprawdza, czy ponad
-// 80% słów wyniku znajduje się w słowniku angielskim (wbudowany,
-// 25 991 słów, z pliku slownik.txt). Pierwszy pasujący klucz jest
-// zwracany wraz z tekstem jawnym.
+// 80% słów wyniku znajduje się w słowniku angielskim. Słownik
+// (wbudowany, plik slownik.txt) ma 25 991 wierszy = 25 839 unikalnych
+// haseł; hasła ze znakami spoza „a-z" (1 862) nigdy nie mogą zostać
+// dopasowane, bo tekst jawny jest normalizowany do „a-z" + spacja.
+// Tick postępu wysyłany jest co 500 000 wypróbowanych kluczy.
+// Pierwszy pasujący klucz jest zwracany wraz z tekstem jawnym.
 package z05
 
 import (
@@ -180,8 +183,8 @@ func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick
 
 	start := time.Now()
 	keysTried := int64(0)
-	notify := func(len int, found bool, plain, key string) {
-		onTick(BreakProgress{KeysTried: keysTried, Len: len, Found: found, Plain: plain, Key: key, Done: true})
+	notify := func(length int, found bool, plain, key string, done bool) {
+		onTick(BreakProgress{KeysTried: keysTried, Len: length, Found: found, Plain: plain, Key: key, Done: done})
 	}
 	timeMs := func() int64 { return time.Since(start).Milliseconds() }
 
@@ -198,7 +201,7 @@ func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick
 				return BreakResult{}, ctx.Err()
 			}
 			if keysTried >= capKeys {
-				notify(l, false, "", "")
+				notify(l, false, "", "", true)
 				return BreakResult{Found: false, KeysTried: keysTried, TimeMs: timeMs()}, nil
 			}
 			// zapisz v jako l-cyfrowy łańcuch z zerami
@@ -210,14 +213,14 @@ func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick
 			plain, ok := breakKey(t, string(buf))
 			keysTried++
 			if ok {
-				notify(l, true, plain, string(buf))
+				notify(l, true, plain, string(buf), true)
 				return BreakResult{Found: true, Plain: plain, Key: string(buf), KeysTried: keysTried, TimeMs: timeMs()}, nil
 			}
 			if keysTried%500_000 == 0 {
-				notify(l, false, "", "")
+				notify(l, false, "", "", false)
 			}
 		}
 	}
-	notify(maxLen, false, "", "")
+	notify(maxLen, false, "", "", true)
 	return BreakResult{Found: false, KeysTried: keysTried, TimeMs: timeMs()}, nil
 }

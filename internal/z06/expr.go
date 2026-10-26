@@ -7,11 +7,11 @@
 //
 // Obsługiwane operatory i funkcje:
 //
-//	+  -  *  /  ^  (potęga, prawostronna)  ( )
-//	funkcje: sin cos tan asin acos atan sinh cosh tanh
-//	          sqrt cbrt ln log log10 exp abs floor ceil round
-//	stałe:  x  pi  e
-//	np.  y = x*x - 6*x + 3,  y = 1/x,  y = tan(x),  y = sin(x)/x
+//   - -  *  /  ^  (potęga, prawostronna)  ( )
+//     funkcje: sin cos tan asin acos atan sinh cosh tanh
+//     sqrt cbrt ln log log10 exp abs floor ceil round
+//     stałe:  x  pi  e
+//     np.  y = x*x - 6*x + 3,  y = 1/x,  y = tan(x),  y = sin(x)/x
 //
 // Implikowane mnożenie jest dozwolone: „2x” oznacza „2*x”,
 // „x sin(x)” — „x*sin(x)” (ale nie „sin(x)” — nazwy funkcji są
@@ -173,7 +173,7 @@ func (n binNode) eval(x float64) float64 {
 }
 
 type unaryNode struct {
-	op   string
+	op    string
 	inner node
 }
 
@@ -210,29 +210,45 @@ func (n callNode) eval(x float64) float64 {
 func isFinite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
 var funcs = map[string]func([]float64) (float64, error){
-	"sin":    func(a []float64) (float64, error) { return math.Sin(a[0]), nil },
-	"cos":    func(a []float64) (float64, error) { return math.Cos(a[0]), nil },
-	"tan":    func(a []float64) (float64, error) { return math.Tan(a[0]), nil },
-	"asin":   func(a []float64) (float64, error) { return math.Asin(a[0]), nil },
-	"acos":   func(a []float64) (float64, error) { return math.Acos(a[0]), nil },
-	"atan":   func(a []float64) (float64, error) { return math.Atan(a[0]), nil },
-	"sinh":   func(a []float64) (float64, error) { return math.Sinh(a[0]), nil },
-	"cosh":   func(a []float64) (float64, error) { return math.Cosh(a[0]), nil },
-	"tanh":   func(a []float64) (float64, error) { return math.Tanh(a[0]), nil },
-	"sqrt":   func(a []float64) (float64, error) { return math.Sqrt(a[0]), nil },
-	"cbrt":   func(a []float64) (float64, error) { return math.Cbrt(a[0]), nil },
-	"ln":     func(a []float64) (float64, error) { return math.Log(a[0]), nil },
-	"log":    func(a []float64) (float64, error) { return math.Log(a[0]), nil },
-	"log10":  func(a []float64) (float64, error) { return math.Log10(a[0]), nil },
-	"exp":    func(a []float64) (float64, error) { return math.Exp(a[0]), nil },
-	"abs":    func(a []float64) (float64, error) { return math.Abs(a[0]), nil },
-	"floor":  func(a []float64) (float64, error) { return math.Floor(a[0]), nil },
-	"ceil":   func(a []float64) (float64, error) { return math.Ceil(a[0]), nil },
-	"round":  func(a []float64) (float64, error) { return math.Round(a[0]), nil },
-	"min":    func(a []float64) (float64, error) { m := a[0]; for _, v := range a[1:] { if v < m { m = v } }; return m, nil },
-	"max":    func(a []float64) (float64, error) { m := a[0]; for _, v := range a[1:] { if v > m { m = v } }; return m, nil },
-	"pow":    func(a []float64) (float64, error) { return math.Pow(a[0], a[1]), nil },
-	"fmod":   func(a []float64) (float64, error) { return math.Mod(a[0], a[1]), nil },
+	"sin":   func(a []float64) (float64, error) { return math.Sin(a[0]), nil },
+	"cos":   func(a []float64) (float64, error) { return math.Cos(a[0]), nil },
+	"tan":   func(a []float64) (float64, error) { return math.Tan(a[0]), nil },
+	"asin":  func(a []float64) (float64, error) { return math.Asin(a[0]), nil },
+	"acos":  func(a []float64) (float64, error) { return math.Acos(a[0]), nil },
+	"atan":  func(a []float64) (float64, error) { return math.Atan(a[0]), nil },
+	"sinh":  func(a []float64) (float64, error) { return math.Sinh(a[0]), nil },
+	"cosh":  func(a []float64) (float64, error) { return math.Cosh(a[0]), nil },
+	"tanh":  func(a []float64) (float64, error) { return math.Tanh(a[0]), nil },
+	"sqrt":  func(a []float64) (float64, error) { return math.Sqrt(a[0]), nil },
+	"cbrt":  func(a []float64) (float64, error) { return math.Cbrt(a[0]), nil },
+	"ln":    func(a []float64) (float64, error) { return math.Log(a[0]), nil },
+	"log":   func(a []float64) (float64, error) { return math.Log(a[0]), nil },
+	"log10": func(a []float64) (float64, error) { return math.Log10(a[0]), nil },
+	"exp":   func(a []float64) (float64, error) { return math.Exp(a[0]), nil },
+	"abs":   func(a []float64) (float64, error) { return math.Abs(a[0]), nil },
+	"floor": func(a []float64) (float64, error) { return math.Floor(a[0]), nil },
+	"ceil":  func(a []float64) (float64, error) { return math.Ceil(a[0]), nil },
+	"round": func(a []float64) (float64, error) { return math.Round(a[0]), nil },
+	"min": func(a []float64) (float64, error) {
+		m := a[0]
+		for _, v := range a[1:] {
+			if v < m {
+				m = v
+			}
+		}
+		return m, nil
+	},
+	"max": func(a []float64) (float64, error) {
+		m := a[0]
+		for _, v := range a[1:] {
+			if v > m {
+				m = v
+			}
+		}
+		return m, nil
+	},
+	"pow":     func(a []float64) (float64, error) { return math.Pow(a[0], a[1]), nil },
+	"fmod":    func(a []float64) (float64, error) { return math.Mod(a[0], a[1]), nil },
 	"sigmoid": func(a []float64) (float64, error) { return 1 / (1 + math.Exp(-a[0])), nil },
 }
 
@@ -246,9 +262,15 @@ func unaryArity(name string) int {
 	return 1
 }
 
+// maxParseDepth ogranicza rekursję parsera (expr→term→factor→power→atom→expr).
+// Bez limitu 10^6 zagnieżdżonych „(” zabija proces (fatal: stack overflow) —
+// fatal error nie jest odławiany przez net/http.
+const maxParseDepth = 100
+
 type parser struct {
-	toks []token
-	pos  int
+	toks  []token
+	pos   int
+	depth int
 }
 
 func (p *parser) peek() *token {
@@ -392,6 +414,11 @@ func (p *parser) power() (node, error) {
 }
 
 func (p *parser) atom() (node, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > maxParseDepth {
+		return nil, fmt.Errorf("zbyt głębokie zagnieżdżenie wyrażeń (limit %d)", maxParseDepth)
+	}
 	t := p.next()
 	if t == nil {
 		return nil, fmt.Errorf("nieoczekiwany koniec wyrażenia")
@@ -481,7 +508,8 @@ func PlotFun(formula string, xmin, xmax float64, samples int) (*Plot, error) {
 	if samples > 20001 {
 		samples = 20001
 	}
-	if xmin >= xmax {
+	// !(...) odrzuca ALSO NaN w granicach (NaN >= x jest zawsze false).
+	if !(xmin < xmax) {
 		return nil, fmt.Errorf("dolna granica przedziału musi być mniejsza od górnej")
 	}
 	ast, err := parseExpr(formula)

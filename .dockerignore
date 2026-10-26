@@ -2,10 +2,12 @@
 .git/
 .gocache/
 .gopath/
+.home/
+.remember/
 bin/
 screenshots/
 .verify/
-.ab-tmp/
+*.log
 Dockerfile
 docker-compose.yml
 README.md

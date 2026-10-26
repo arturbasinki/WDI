@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sort"
 	"time"
 )
 
@@ -84,6 +85,9 @@ func SieveMap(n int) []int {
 			out = append(out, p)
 		}
 	}
+	// Iteracja mapy jest niedeterministyczna — zwracamy listę rosnąco,
+	// spójnie z SieveSlice/SieveBit (test TestSieveMapOrdered).
+	sort.Ints(out)
 	return out
 }
 

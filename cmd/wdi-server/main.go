@@ -91,9 +91,9 @@ func (j *Job) finish(result any, err error) {
 }
 
 type jobStore struct {
-	mu    sync.Mutex
-	seq   int
-	jobs  map[string]*Job
+	mu   sync.Mutex
+	seq  int
+	jobs map[string]*Job
 }
 
 func (s *jobStore) create() (*Job, string) {
@@ -195,6 +195,13 @@ func newAPI(jobs *jobStore) http.Handler {
 		ctx, cancel := context.WithCancel(context.Background())
 		j.cancel = cancel
 		go func() {
+			defer func() {
+				// panic w tej gorutynie zabiłby cały proces (leży poza
+				// odzyskiwaniem net/http) — zamieniamy go w stan „error”.
+				if r := recover(); r != nil {
+					j.finish(nil, fmt.Errorf("panic w obliczeniach: %v", r))
+				}
+			}()
 			res, err := z02.Search(ctx, req.Limit, func(p z02.Progress) { j.setProgress(p) })
 			if errors.Is(ctx.Err(), context.Canceled) {
 				j.mu.Lock()
@@ -254,6 +261,11 @@ func newAPI(jobs *jobStore) http.Handler {
 		ctx, cancel := context.WithCancel(context.Background())
 		j.cancel = cancel
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					j.finish(nil, fmt.Errorf("panic w obliczeniach: %v", r))
+				}
+			}()
 			rows, err := z03.Benchmark(ctx, req.NS, func(p z03.Progress) { j.setProgress(p) })
 			if errors.Is(ctx.Err(), context.Canceled) {
 				j.mu.Lock()
@@ -367,6 +379,11 @@ func newAPI(jobs *jobStore) http.Handler {
 		ctx, cancel := context.WithCancel(context.Background())
 		j.cancel = cancel
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					j.finish(nil, fmt.Errorf("panic w obliczeniach: %v", r))
+				}
+			}()
 			res, err := z05.Break(ctx, req.Cipher, req.MaxLen, req.CapKeys, func(p z05.BreakProgress) { j.setProgress(p) })
 			if errors.Is(ctx.Err(), context.Canceled) {
 				j.mu.Lock()
@@ -409,6 +426,10 @@ func newAPI(jobs *jobStore) http.Handler {
 			Samples int     `json:"samples"`
 		}
 		if !decodeBody(w, r, &req) {
+			return
+		}
+		if len(req.Expr) > 2000 {
+			httpErr(w, 400, "wyrażenie jest za długie (maksymalnie 2000 znaków)")
 			return
 		}
 		if req.Samples == 0 {

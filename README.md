@@ -4,15 +4,16 @@
 
 ## Rozwiązanie w Go + jednorodna strona WWW
 
-Wszystkie 8 zadań zostało przepisanych **od nowa w Go** (Go 1.25, wyłącznie biblioteka standardowa —
-zero zależności zewnętrznych) i zaprezentowane jako **jedna strona WWW**: startowy ekran z 8
+Wszystkie 8 zadań zostało przepisanych **od nowa w Go** (sklejalnia: go.mod `go 1.25.6`,
+wyłącznie biblioteka standardowa — zero zależności zewnętrznych) i zaprezentowane jako
+**jedna strona WWW**: startowy ekran z 8
 kafelkami, każdy prowadzący do graficznej, interaktywnej implementacji zadania. Całość (kod Go,
 frontend HTML/CSS/JS, „Pan Tadeusz” i słownik angielski) jest wbudowana w **jeden plik binarny**
-(`go:embed`) — nie ma plików konfiguracyjnych ani zasobów do kopирования.
+(`go:embed`) — nie ma plików konfiguracyjnych ani zasobów do kopiowania.
 
 ### Uruchomienie
 
-Natywne (Go ≥ 1.25.6):
+Natywnie (Go ≥ 1.25.6):
 
 ```bash
 go build -o bin/wdi-server ./cmd/wdi-server   # jeden binarny plik
@@ -28,18 +29,22 @@ docker compose down             # stop
 
 # lub bez compose:
 docker build -t wdi:latest .
-docker run --rm -p 8080:8080 wdi:latest
+docker run --rm -p 127.0.0.1:8080:8080 wdi:latest
 ```
 
-Obraz: dwuwarstwowy (budowa `golang:1.25.6` → runtime `alpine:3.20`, użytkownik
-nie-root, `CGO_ENABLED=0`), wszystko wbudowane w binarny plik przez `go:embed`,
-healthcheck na `/api/tasks`. Zmiana portu: edycja mapowania w `docker-compose.yml`.
+Obraz: dwuetapowy (budowa `golang:1.26` → runtime `alpine:3.23`, użytkownik
+nie-root, `CGO_ENABLED=0`, bez pakietów apk), wszystko wbudowane w binarny plik przez
+`go:embed` (~15 MB). `HEALTHCHECK` na `/api/tasks` jest w obrazie **i** w compose.
+Compose wiąże port tylko na `127.0.0.1` (aplikacja lokalna). Jeśli 8080 jest zajęty
+przez inną usługę, zmień lewą stronę mapowania w `docker-compose.yml` (np.
+`"127.0.0.1:9000:8080"`) i zaktualizuj `PORT` + healthcheck w tym pliku.
 
 Testy (wszystkie pakiety, ~5 s; tryb `-short` ~1 s):
 
 ```bash
 go test ./internal/...        # pełny zestaw
-go test -short ./internal/... # szybki zestaw (bez ciękich przeszukiwań)
+go test -short ./internal/... # szybki zestaw (bez ciężkich przeszukiwań)
+go test -race ./internal/...  # zestaw z detektorem wyścigów
 ```
 
 ### Struktura
@@ -143,5 +148,7 @@ Uwagi:
     wyniki programu dla przykładowych danych.
 - Rozwiązania zadań wraz z opisami proszę umieścić w jednym plik typu DOC lub PDF.
 - Rozwiązania zadań proszę umieścić w kolejności rosnących numerów.
-- Plik z rozwiązaniami proszę umieścić w systemie Moodle do końca lutego 2024 roku# WDI
+- Plik z rozwiązaniami proszę umieścić w systemie Moodle do końca lutego 2024 roku
+
+# WDI
 Rozwiązania zadań WDI

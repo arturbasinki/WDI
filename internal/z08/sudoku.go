@@ -38,11 +38,11 @@ type Result struct {
 
 // SolveResult — wynik rozwiązania podanej planszy.
 type SolveResult struct {
-	Solved    bool  `json:"solved"`
-	Solution  Grid  `json:"solution,omitempty"`
-	Count     int   `json:"count"`     // liczba rozwiązań (zliczane do cap)
-	Capped    bool  `json:"capped"`    // czy zliczanie urwano po cap
-	TimeMs    int64 `json:"timeMs"`
+	Solved   bool  `json:"solved"`
+	Solution Grid  `json:"solution,omitempty"`
+	Count    int   `json:"count"`  // liczba rozwiązań (zliczane do cap)
+	Capped   bool  `json:"capped"` // czy zliczanie urwano po cap
+	TimeMs   int64 `json:"timeMs"`
 }
 
 // ValidateGrid sprawdza poprawność formatu planszy (81 wartości 0..9).
@@ -239,6 +239,9 @@ func Solve(g []int, cap int) (SolveResult, error) {
 	if err := ValidateGrid(g); err != nil {
 		return SolveResult{}, err
 	}
+	if cap < 1 {
+		return SolveResult{}, fmt.Errorf("cap musi być >= 1, podano %d", cap)
+	}
 	var grid Grid
 	copy(grid[:], g)
 	count := CountSolutions(grid, cap)
@@ -247,7 +250,9 @@ func Solve(g []int, cap int) (SolveResult, error) {
 		// odzyskaj pierwsze rozwiązanie (zresetuj grid i zagraj do końca)
 		var grid2 Grid
 		copy(grid2[:], g)
-		fillFirst(&grid2)
+		if !fillFirst(&grid2) {
+			return SolveResult{}, fmt.Errorf("błąd wewnętrzny: licznik znalazł rozwiązania, a fillFirst nie")
+		}
 		res.Solution = grid2
 	}
 	return res, nil

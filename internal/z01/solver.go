@@ -77,7 +77,10 @@ type Result struct {
 	FreeVars      []string       `json:"freeVars,omitempty"`
 	SolutionLines []SolutionLine `json:"solutionLines"`
 	Steps         []Step         `json:"steps"`
-	Rank          int            `json:"rank"`
+	// StepsTruncated: animacja ucięta po wyczerpaniu budżetu kroków
+	// (patrz Solve) — nie dotyczy poprawności wyniku.
+	StepsTruncated bool `json:"stepsTruncated"`
+	Rank           int  `json:"rank"`
 }
 
 // Parse parsuje tekst w formacie pliku zadania: w pierwszym wierszu N,
@@ -112,6 +115,9 @@ func Parse(text string) (A [][]float64, err error) {
 	if len(merged) < 1+need {
 		return nil, fmt.Errorf("oczekiwałem %d liczb (N wierszy po N+1), znaleziono %d", need, len(merged)-1)
 	}
+	if len(merged) > 1+need {
+		return nil, fmt.Errorf("za dużo liczb: %d, oczekiwane %d dla N=%d", len(merged)-1, need, n)
+	}
 	A = make([][]float64, n)
 	for i := 0; i < n; i++ {
 		A[i] = make([]float64, n+1)
@@ -119,6 +125,11 @@ func Parse(text string) (A [][]float64, err error) {
 			v, err := strconv.ParseFloat(merged[1+i*(n+1)+j], 64)
 			if err != nil {
 				return nil, fmt.Errorf("niepoprawna liczba %q w wierszu %d", merged[1+i*(n+1)+j], i+1)
+			}
+			// ParseFloat akceptuje „NaN”/„Inf” — dla układu równań to dane
+			// bez sensu (Solve dałby status „unique” z x = NaN).
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return nil, fmt.Errorf("wartość %q w wierszu %d nie jest skończona", merged[1+i*(n+1)+j], i+1)
 			}
 			A[i][j] = v
 		}
@@ -142,7 +153,23 @@ func Solve(A [][]float64) Result {
 	M := snapshot(A)
 	res := Result{N: n, RREF: M, Steps: []Step{}}
 	steps := &res.Steps
-	*steps = append(*steps, Step{Description: "Macierz poszerzona [A|b] na start.", Matrix: snapshot(M)})
+	// Budżet pamięci animacji: każdy krok kopiuje pełną macierz n×(n+1),
+	// a pełny Gauss-Jordan wykonuje ~n² kroków — dla n=100 dałoby to
+	// ~10 000 snapshotów (~1,1 GB odpowiedzi JSON, ~4,7 GB RSS —OOM).
+	// Po wyczerpaniu budżetu zaprzestajemy rejestracji i ustawiamy flagę;
+	// wynik (RREF/x/steps do momentu cięcia) pozostaje poprawny.
+	const maxStepCells = 400_000
+	stepCells := 0
+	record := func(desc string) {
+		c := n * (n + 1)
+		if stepCells+c > maxStepCells {
+			res.StepsTruncated = true
+			return
+		}
+		stepCells += c
+		*steps = append(*steps, Step{Description: desc, Matrix: snapshot(M)})
+	}
+	record("Macierz poszerzona [A|b] na start.")
 
 	pivotCols := []int{}
 	row := 0
@@ -159,20 +186,14 @@ func Solve(A [][]float64) Result {
 		}
 		if p != row {
 			M[p], M[row] = M[row], M[p]
-			*steps = append(*steps, Step{
-				Description: fmt.Sprintf("Zamiana wierszy W%d i W%d (wybór wiodącego w kolumnie %d).", row+1, p+1, col+1),
-				Matrix:      snapshot(M),
-			})
+			record(fmt.Sprintf("Zamiana wierszy W%d i W%d (wybór wiodącego w kolumnie %d).", row+1, p+1, col+1))
 		}
 		// Normalizacja wiersza wiodącego.
 		div := M[row][col]
 		for j := col; j <= n; j++ {
 			M[row][j] /= div
 		}
-		*steps = append(*steps, Step{
-			Description: fmt.Sprintf("W%d := W%d / %s", row+1, row+1, fmtNum(div)),
-			Matrix:      snapshot(M),
-		})
+		record(fmt.Sprintf("W%d := W%d / %s", row+1, row+1, fmtNum(div)))
 		// Eliminacja reszty wierszy (góra i dół) — pełny Gauss-Jordan.
 		for r := 0; r < n; r++ {
 			if r == row {
@@ -185,10 +206,7 @@ func Solve(A [][]float64) Result {
 			for j := col; j <= n; j++ {
 				M[r][j] -= f * M[row][j]
 			}
-			*steps = append(*steps, Step{
-				Description: fmt.Sprintf("W%d := W%d − %s·W%d", r+1, r+1, fmtNum(f), row+1),
-				Matrix:      snapshot(M),
-			})
+			record(fmt.Sprintf("W%d := W%d − %s·W%d", r+1, r+1, fmtNum(f), row+1))
 		}
 		pivotCols = append(pivotCols, col)
 		row++
@@ -232,7 +250,6 @@ func Solve(A [][]float64) Result {
 				v = math.Round(v*1e9) / 1e9
 			}
 			res.X[c] = v
-			res.SolutionLines[c] = SolutionLine{Var: varName(c), Expr: fmtNum(v)}
 		}
 		for c := 0; c < n; c++ {
 			res.SolutionLines[c] = SolutionLine{Var: varName(c), Expr: fmtNum(res.X[c])}
@@ -265,21 +282,18 @@ func Solve(A [][]float64) Result {
 			if math.Abs(a) < Epsilon {
 				continue
 			}
-			if a > 0 {
+			// x_p = b − Σ a·t ⇒ do wyrażenia wchodzi SkŁADNIK (−a)·t_k.
+			coef := -a
+			if coef > 0 {
 				expr.WriteString(" + ")
-				if math.Abs(a-1) < Epsilon {
-					expr.WriteString(res.FreeVars[k])
-				} else {
-					expr.WriteString(fmtNum(a) + "·" + res.FreeVars[k])
-				}
 			} else {
 				expr.WriteString(" − ")
-				aa := -a
-				if math.Abs(aa-1) < Epsilon {
-					expr.WriteString(res.FreeVars[k])
-				} else {
-					expr.WriteString(fmtNum(aa) + "·" + res.FreeVars[k])
-				}
+				coef = -coef
+			}
+			if math.Abs(coef-1) < Epsilon {
+				expr.WriteString(res.FreeVars[k])
+			} else {
+				expr.WriteString(fmtNum(coef) + "·" + res.FreeVars[k])
 			}
 		}
 		res.SolutionLines[p] = SolutionLine{Var: varName(p), Expr: expr.String()}

@@ -53,11 +53,12 @@ const (
 // 9^19 ≈ 1,35·10^18 mieści się w int64 (MaxInt64 ≈ 9,22·10^18).
 const maxDigits = 19
 
-// pow10[i] = 10^i
+// pow10[i] = 10^i. Ostatnia obsługiwana potęga to 10^18 — 10^19
+// przepełniłaby int64.
 var pow10 = func() []int64 {
 	p := make([]int64, 20)
 	p[0] = 1
-	for i := 1; i < 20; i++ {
+	for i := 1; i < 19; i++ {
 		p[i] = p[i-1] * 10
 	}
 	return p
@@ -155,7 +156,10 @@ func Search(ctx context.Context, limit int64, onTick func(Progress)) (Progress, 
 
 	// Zbierz bloki: dla każdej liczby cyfr d przedział [10^(d-1), 10^d)
 	// (dla d=1 zaczynamy od 0, bo 0 jest liczbą Armstronga).
-	type chunk struct{ start, end int64; digits int }
+	type chunk struct {
+		start, end int64
+		digits     int
+	}
 	chunks := []chunk{}
 	for d := 1; d <= maxDigits; d++ {
 		lo := pow10[d-1]
@@ -194,6 +198,9 @@ func Search(ctx context.Context, limit int64, onTick func(Progress)) (Progress, 
 		}()
 	}
 	go func() {
+		// close NIGDY nie może zostać pominięte: bez niego robotnicy
+		// czekają na `range jobs` w nieskończoność po anulowaniu.
+		defer close(jobs)
 		for _, c := range chunks {
 			select {
 			case jobs <- c:
@@ -201,16 +208,22 @@ func Search(ctx context.Context, limit int64, onTick func(Progress)) (Progress, 
 				return
 			}
 		}
-		close(jobs)
 	}()
 
-	// Ticker postępu (~10 Hz).
+	// Ticker postępu (~10 Hz). Musi zostać zatrzymany i dołączony (join)
+	// przed fazą końcową — bez tego finalny sort kopia/found współzawodniczy
+	// z odczytem tablicy przez tickera (wykryte przez `go test -race`).
+	tickStop := make(chan struct{})
+	tickDone := make(chan struct{})
 	go func() {
+		defer close(tickDone)
 		t := time.NewTicker(100 * time.Millisecond)
 		defer t.Stop()
 		for {
 			select {
 			case <-t.C:
+			case <-tickStop:
+				return
 			case <-ctx.Done():
 				return
 			}
@@ -223,10 +236,23 @@ func Search(ctx context.Context, limit int64, onTick func(Progress)) (Progress, 
 	}()
 
 	wg.Wait()
+	// Zatrzymaj tickera i poczekaj na jego zakończenie: od tej chwili
+	// `found` mutuje wyłącznie ta gorutyna.
+	close(tickStop)
+	<-tickDone
+	// Przerwane przeszukiwanie: zwracamy dotychczasowy stan BŁĘDEM
+	// contextu (kontrakt jak w z05.Break) — nie udajemy sukcesu.
+	if cerr := ctx.Err(); cerr != nil {
+		mu.Lock()
+		f := append([]int64(nil), found...)
+		mu.Unlock()
+		sort.Slice(f, func(i, j int) bool { return f[i] < f[j] })
+		return Progress{Processed: processed.Load(), Limit: limit, Found: f}, cerr
+	}
 	// Ostateczny stan: uzupełnij licznik do limitu (przybliżenie).
 	processed.Store(limit + 1)
 	mu.Lock()
-	f := found
+	f := append([]int64(nil), found...) // kopia: zwracany stan nie aliasuje wewnętrznego found
 	mu.Unlock()
 	sort.Slice(f, func(i, j int) bool { return f[i] < f[j] })
 	res := Progress{Processed: limit + 1, Limit: limit, Found: f, Done: true}

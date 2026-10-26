@@ -61,7 +61,7 @@ func isConsistent(g Grid) bool {
 		v := g[i]
 		r, c := i/9, i%9
 		for j := 0; j < 9; j++ {
-			if j == i%9 || g[r*9+j] == v {
+			if j == c {
 				continue
 			}
 			if g[r*9+j] == v {
@@ -69,7 +69,7 @@ func isConsistent(g Grid) bool {
 			}
 		}
 		for j := 0; j < 9; j++ {
-			if j == r || g[j*9+c] == v {
+			if j == r {
 				continue
 			}
 			if g[j*9+c] == v {

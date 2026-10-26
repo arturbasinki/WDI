@@ -66,9 +66,9 @@ func TestDivision(t *testing.T) {
 
 func TestErrors(t *testing.T) {
 	for _, eq := range []string{
-		"ABC = BD",        // za mało tokenów
-		"A ? B = C",       // zły operator
-		"AB1 * C = DE",    // cyfra zamiast litery
+		"ABC = BD",                  // za mało tokenów
+		"A ? B = C",                 // zły operator
+		"AB1 * C = DE",              // cyfra zamiast litery
 		"ABCDEFGHIJKLMNOP * C = DE", // > 10 liter
 	} {
 		if _, err := Solve(eq); err == nil {

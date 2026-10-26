@@ -60,8 +60,10 @@ func ExtractWords(text string) []string {
 }
 
 // TopWords zwraca k najczęściej występujących słów w tekście.
-// Sortowanie: malejąca liczba wystąpień, a przy remisie — alfabetycznie
-// (deterministyczny wynik, łatwy do porównania z wersją Python).
+// Sortowanie: malejąca liczba wystąpień, a przy remisie — alfabetycznie.
+// Uwaga: Python (Counter.most_common) przy remisach zachowuje kolejność
+// wstawiania, więc przy pozycjach „remisowych" pełne listy mogą się
+// różnić — gwarantowane jest pokrywanie się rankingów bez remisów.
 func TopWords(text string, k int) []WordCount {
 	if k < 1 {
 		k = 20

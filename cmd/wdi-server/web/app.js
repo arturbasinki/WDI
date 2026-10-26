@@ -300,6 +300,9 @@ VIEWS.z01 = (view) => {
         `<div class="kv"><span>rank = <b>${res.rank}</b> / ${res.n}</span>` +
         (res.freeVars ? `<span>niewiadome wolne: <b>${res.freeVars.map(esc).join(", ")}</b></span>` : "") +
         `<span>operacji wierszowych: <b>${res.steps.length - 1}</b></span></div>` +
+        (res.stepsTruncated
+          ? `<div class="muted mt8">Animacja pokazuje pierwsze ${res.steps.length} kroków (limit pamięci dla dużych układów) — wynik końcowy i rozwiązania są pełne.</div>`
+          : "") +
         `<div class="flex-between mt14">
            <div class="muted">Redukcja do postaci RREF (krok po kroku):</div>
            <div class="stepnav" style="margin:0">
