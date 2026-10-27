@@ -1,12 +1,15 @@
 # WDI — serwer WWW z rozwiązaniami 8 zadań (Go)
 #
 #   docker compose up --build -d     # buduje obraz i startuje
-#   → http://localhost:8080
+#   → http://127.0.0.1:8099          # UWAGA: 127.0.0.1, nie "localhost"
 #
-# Port: lewa strona mapowania "HOST:KONTENER" — tylko 127.0.0.1 (aplikacja
-# lokalna; pełne "8080:8080" wystawiałoby serwer w LAN). Jeśli 8080 zajmuje
-# inna usługa, zmień na np. "127.0.0.1:9000:8080" i zaktualizuj PORT +
-# healthcheck poniżej.
+# Mapa "HOST:KONTENER" niżej: serwer w kontenerze słucha na PORT (8080), a na
+# hoście wystawiamy go pod 8099, bo 8080 zajmuje inna usługa. Bind jest TYLKO
+# na 127.0.0.1 (IPv4, aplikacja lokalna; "8099:8080" bez interfejsu wystawiłby
+# serwer w LAN) — przeglądarki bywają przy "localhost" pytają o ::1 (IPv6) i
+# dostają odmowę połączenia. Gdyby "localhost" miał działać, dopisz mapę
+# "[::1]:8099:8080". Zmiana portu hosta = lewa strona mapy; PORT w kontenerze
+# (i healthcheck przez $$PORT) wtedy zostaje bez zmian.
 
 services:
   wdi:
@@ -16,7 +19,7 @@ services:
     image: wdi:latest
     container_name: wdi
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8099:8080"
     environment:
       PORT: "8080"
     restart: unless-stopped

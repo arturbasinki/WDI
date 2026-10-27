@@ -24,7 +24,7 @@ Docker (zalecane — zero zależności na hoście):
 
 ```bash
 docker compose up --build -d    # buduje obraz (2 etapy) i startuje kontener
-# → http://localhost:8080
+# → http://127.0.0.1:8099        # 127.0.0.1, nie "localhost" (bind IPv4-only)
 docker compose down             # stop
 
 # lub bez compose:
@@ -35,9 +35,11 @@ docker run --rm -p 127.0.0.1:8080:8080 wdi:latest
 Obraz: dwuetapowy (budowa `golang:1.26` → runtime `alpine:3.23`, użytkownik
 nie-root, `CGO_ENABLED=0`, bez pakietów apk), wszystko wbudowane w binarny plik przez
 `go:embed` (~15 MB). `HEALTHCHECK` na `/api/tasks` jest w obrazie **i** w compose.
-Compose wiąże port tylko na `127.0.0.1` (aplikacja lokalna). Jeśli 8080 jest zajęty
-przez inną usługę, zmień lewą stronę mapowania w `docker-compose.yml` (np.
-`"127.0.0.1:9000:8080"`) i zaktualizuj `PORT` + healthcheck w tym pliku.
+Compose wiąże port tylko na `127.0.0.1` (IPv4; aplikacja lokalna) i wystawia kontenerowy
+`8080` pod hostowym **8099**, bo 8080 zajmuje na tej maszynie inna usługa. Zmiana portu
+hosta = lewa strona mapowania (np. `"127.0.0.1:9000:8080"`); `PORT` w kontenerze i
+healthcheck (`$$PORT`) zostają bez zmian. BIND jest IPv4-only, więc używaj
+`http://127.0.0.1:<port>`, a nie `localhost` (bywa rozwiązywany na `::1`).
 
 Testy (wszystkie pakiety, ~5 s; tryb `-short` ~1 s):
 
