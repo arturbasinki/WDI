@@ -12,6 +12,7 @@ package z04
 
 import (
 	_ "embed"
+	"fmt"
 	"sort"
 	"strings"
 	"unicode"
@@ -33,6 +34,12 @@ func PanTadeusz() string {
 
 // MinLength — minimalna długość zliczanego słowa (w literach).
 const MinLength = 5
+
+// DefaultTop — domyślna liczba zwracanych słów (treść zadania: „20
+// najczęściej występujących słów”). Warstwa wywołująca (HTTP/UI) stosuje
+// tę wartość JAWNIE, gdy klient nie podaje swojego k; biblioteka nie
+// podmienia jej w ukryciu (patrz TopWords).
+const DefaultTop = 20
 
 // ExtractWords dzieli tekst na słowa: ciągły fragment liter (Unicode),
 // bez rozróżniania wielkości liter, o długości co najmniej MinLength.
@@ -64,9 +71,14 @@ func ExtractWords(text string) []string {
 // Uwaga: Python (Counter.most_common) przy remisach zachowuje kolejność
 // wstawiania, więc przy pozycjach „remisowych" pełne listy mogą się
 // różnić — gwarantowane jest pokrywanie się rankingów bez remisów.
-func TopWords(text string, k int) []WordCount {
+//
+// k <= 0 jest BŁĘDEM, a nie cichym „20”: dawniej ujemne/zerowe k
+// podmieniało domyślną wartość w środku biblioteki, więc wywołujący nie
+// miał jak zapytać o „zero wyników" ani sprawdzić, jaka wartość weszła
+// po drodze. Domyślną liczbę stosuje warstwa wywołująca (patrz DefaultTop).
+func TopWords(text string, k int) ([]WordCount, error) {
 	if k < 1 {
-		k = 20
+		return nil, fmt.Errorf("k musi być >= 1, podano %d", k)
 	}
 	counts := map[string]int{}
 	for _, w := range ExtractWords(text) {
@@ -85,5 +97,5 @@ func TopWords(text string, k int) []WordCount {
 	if len(out) > k {
 		out = out[:k]
 	}
-	return out
+	return out, nil
 }

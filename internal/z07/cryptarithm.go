@@ -47,7 +47,13 @@ type Result struct {
 	TimeMs    int64      `json:"timeMs"`
 }
 
-const maxSolutions = 50 // ile przykładów zwracamy (liczba wszystkich)
+const (
+	// DefaultSolutions — ile rozwiązań zwracamy domyślnie (handler HTTP
+	// stosuje jawnie, gdy klient nie podaje limitu).
+	DefaultSolutions = 50
+	// MaxSolutions — sufit limitu w warstwie HTTP (przycinamy, nie odrzucamy).
+	MaxSolutions = 500
+)
 
 // parseEquation parsuje „LHS op RHS = RES”.
 func parseEquation(eq string) (lhs, op, rhs, res string, err error) {
@@ -88,8 +94,14 @@ func parseEquation(eq string) (lhs, op, rhs, res string, err error) {
 	return lhs, op, rhs, res, nil
 }
 
-// Solve rozwiązuje zagadkę i zwraca wszystkie rozwiązania.
-func Solve(eq string) (*Result, error) {
+// Solve rozwiązuje zagadkę i zwraca rozwiązania.
+//
+// limit <= 0 oznacza BEZ LIMITU — zwracane są wszystkie rozwiązania
+// (przeszukiwanie i tak jest wyczerpujące, więc nie ma za co oszczędzać).
+// limit > 0 ogranicza TYLKO zwracany zbiór Solutions (do limitu pozycji);
+// Count jest zawsze pełną liczbą rozwiązań, nigdy nie zależy od limitu.
+// Result.Truncated mówi, czy rozwiązania przycięto (count > len(Solutions)).
+func Solve(eq string, limit int) (*Result, error) {
 	start := time.Now()
 	lhs, op, rhs, res, err := parseEquation(eq)
 	if err != nil {
@@ -139,6 +151,12 @@ func Solve(eq string) (*Result, error) {
 
 	solutions := []Solution{}
 	count := 0
+	// Ile rozwiązań ZAPISUJEMY: limit <= 0 → bez limitu (math.MaxInt).
+	// Count liczy pełną liczbę rozwiązań niezależnie od tego sufitu.
+	capSol := limit
+	if capSol <= 0 {
+		capSol = math.MaxInt
+	}
 
 	var dfs func(k int)
 	dfs = func(k int) {
@@ -171,7 +189,7 @@ func Solve(eq string) (*Result, error) {
 			}
 			if ok {
 				count++
-				if len(solutions) < maxSolutions {
+				if len(solutions) < capSol {
 					mapping := map[string]int{}
 					for _, r := range letters {
 						mapping[string(r)] = int(digitOf[r-'A'])

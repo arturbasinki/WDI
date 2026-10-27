@@ -1,0 +1,64 @@
+# CI — bramka jakości WDI.
+#
+# Kolejność kroków = kolejność tanich kontroli: format, statyczna analiza,
+# testy z detektorem wyścigów, składnia frontendu, binarka, obraz Dockera.
+#
+# UWAGA: `gofmt -l` jest celowo zawężone do `cmd internal`. W katalogu
+# głównym leży `.gopath/` (toolchain i moduły narzędzi, część plików celowo
+# nieparsowalna) oraz `.gocache/` — pełne `gofmt -l .` dałoby szum i exit 2.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Wersja Go bieremy z go.mod — jedno źródło, brak dryfu z Dockerfile.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt (cmd, internal)
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then
+            echo "Poza gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+          echo "gofmt: czysto"
+
+      - name: go vet
+        run: go vet ./...
+
+      # Warstwa HTTP (cmd/…) ma testy, więc jest w zakresie tak samo jak solvery.
+      - name: Testy (detektor wyścigów)
+        run: go test -race -count=1 ./cmd/... ./internal/...
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Frontend to jeden plik vanilla JS bez bundlera — sprawdzamy samą składnię.
+      - name: Składnia frontendu
+        run: node --check cmd/wdi-server/web/app.js
+
+      - name: Budowa binarki
+        run: go build -trimpath -ldflags "-s -w" -o bin/wdi-server ./cmd/wdi-server
+
+      # README obiecuje działający obraz (~15 MB, dwuetapowy) — pilnujemy tego.
+      - name: Budowa obrazu Dockera
+        run: docker build -t wdi:ci .

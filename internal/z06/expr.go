@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Point — punkt na wykresie.
@@ -42,13 +43,19 @@ type Point struct {
 
 // Plot — wynik próbkowania funkcji.
 type Plot struct {
-	Formula    string    `json:"formula"`
-	XMin       float64   `json:"xmin"`
-	XMax       float64   `json:"xmax"`
-	Samples    int       `json:"samples"`
-	Segments   [][]Point `json:"segments"`
-	Asymptotes []float64 `json:"asymptotes"`
-	YClamp     float64   `json:"yclamp"`
+	Formula string  `json:"formula"`
+	XMin    float64 `json:"xmin"`
+	XMax    float64 `json:"xmax"`
+	// Samples — liczba próbek REALNIE użyta (po przycięciu do 501…20001).
+	Samples int `json:"samples"`
+	// SamplesRequested — ile próbek ŻĄDANO. Gdy różni się od Samples,
+	// interfejs mówi o tym wprost: dawniej granice i próbki przycinano
+	// po cichu i klient widział „1601”, prosząc o 5 000 000.
+	SamplesRequested int       `json:"samplesRequested"`
+	Segments         [][]Point `json:"segments"`
+	Asymptotes       []float64 `json:"asymptotes"`
+	// YClamp — próg, do którego przycinane są wartości Y (±YClamp).
+	YClamp float64 `json:"yclamp"`
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +98,22 @@ func tokenize(s string) ([]token, error) {
 				}
 				j++
 			}
+			// NOTACJA WYKŁADNICZA: po mantisie przyjmujemy [eE][+-]cyfry.
+			// Wykładnik musi mieć CYFRĘ po znaku — więc „2e3” to 2000,
+			// a „3e” oraz „2e+” dalej znaczą 3·e (stała E), bo „e” bez
+			// cyfr jest identyfikatorem, nie wykładnikiem.
+			if j < len(s) && (s[j] == 'e' || s[j] == 'E') {
+				k := j + 1
+				if k < len(s) && (s[k] == '+' || s[k] == '-') {
+					k++
+				}
+				if k < len(s) && s[k] >= '0' && s[k] <= '9' {
+					for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+						k++
+					}
+					j = k
+				}
+			}
 			if dots > 1 {
 				return nil, fmt.Errorf("nieprawidłowy zapis liczby: %q", s[i:j])
 			}
@@ -111,7 +134,11 @@ func tokenize(s string) ([]token, error) {
 			toks = append(toks, token{kind: tOp, text: tokenAliases[string(c)]})
 			i++
 		default:
-			return nil, fmt.Errorf("nieznany znak %q", string(c))
+			// Komunikat na RUNIE, nie na bajcie: „π” to dwa bajty, a %q na
+			// pierwszym dawało mojibake „Ï” — użytkownik nie widział, o który
+			// znak chodzi. Tu czytamy cały znak i pokazujemy go.
+			r, _ := utf8.DecodeRuneInString(s[i:])
+			return nil, fmt.Errorf("nieznany znak %q", string(r))
 		}
 	}
 	return toks, nil
@@ -501,7 +528,11 @@ func funcNames() string {
 // ---------------------------------------------------------------------------
 
 // PlotFun próbkuje funkcję wyrażoną wzorem w przedziale [xmin, xmax].
-func PlotFun(formula string, xmin, xmax float64, samples int) (*Plot, error) {
+// samplesRequested to liczba próbek ŻĄDANA: realnie użyta jest przycinana
+// do 501…20001, a obie wartości wracają w Plot (Samples / SamplesRequested),
+// żeby interfejs mógł powiedzieć klientowi, co z tego zostało.
+func PlotFun(formula string, xmin, xmax float64, samplesRequested int) (*Plot, error) {
+	samples := samplesRequested
 	if samples < 501 {
 		samples = 501
 	}
@@ -555,14 +586,26 @@ func PlotFun(formula string, xmin, xmax float64, samples int) (*Plot, error) {
 	jumpThresh := 4 * iqr
 	clampThresh := p50 + 15*iqr
 
-	// Segmentacja: zerwij odcinek gdy
-	//  - punkt nieskończony/NaN,
-	//  - zmiana znaku z dużym skokiem (asymptota pionowa),
-	//  - wejście/wyjście z obszaru „wyrzutów” (|y| > clampThresh).
-	clamped := make([]bool, samples)
+	// Y PRZYCINANE realnie do ±clampThresh: punkt „wyrzutu” ZOSTAJE na
+	// wykresie z rzędną ściętą do progu, więc gałąź dojeżdża do ramki.
+	// Dawniej punkty ponad progiem były usuwane — odcinek urywał się tuż
+	// pod progiem (dla 1/x na [-5,5] gałęzie kończyły się przy |y| ≈ 41,
+	// czyli w połowie drogi do asymptoty).
+	clamped := make([]float64, samples)
 	for i := 0; i < samples; i++ {
-		clamped[i] = isFinite(ys[i]) && math.Abs(ys[i]) > clampThresh
+		clamped[i] = ys[i]
+		if clamped[i] > clampThresh {
+			clamped[i] = clampThresh
+		} else if clamped[i] < -clampThresh {
+			clamped[i] = -clampThresh
+		}
 	}
+
+	// Segmentacja: zerwij odcinek gdy
+	//  - punkt jest ±Inf/NaN (w okolicy leży asymptota pionowa),
+	//  - zmiana znaku z dużym skokiem (asymptota pionowa).
+	// Wejście/wyjście ze strefy „wyrzutów” NIE przerywa już odcinka —
+	// wartości są przycinane, więc krzywa jest ciągła aż do ramki.
 	breakAt := make([]bool, samples) // breakAt[i] — przerwa między i-1 a i
 	asymptotes := []float64{}
 	for i := 1; i < samples; i++ {
@@ -580,10 +623,6 @@ func PlotFun(formula string, xmin, xmax float64, samples int) (*Plot, error) {
 		if yi*yj < 0 && math.Abs(yj-yi) > jumpThresh {
 			breakAt[i] = true
 			asymptotes = append(asymptotes, (xs[i-1]+xs[i])/2)
-			continue
-		}
-		if clamped[i-1] != clamped[i] {
-			breakAt[i] = true
 		}
 	}
 	// Deduplikacja asymptot bliższych niż 2 kroki.
@@ -606,24 +645,26 @@ func PlotFun(formula string, xmin, xmax float64, samples int) (*Plot, error) {
 		}
 	}
 	for i := 0; i < samples; i++ {
-		if isFinite(ys[i]) && !clamped[i] {
-			cur = append(cur, Point{X: xs[i], Y: ys[i]})
-			if i == samples-1 || (i < samples-1 && breakAt[i+1]) {
-				flush()
-			}
+		if !isFinite(ys[i]) {
+			// punkt ±Inf/NaN: kończy segment
+			flush()
 			continue
 		}
-		// punkt wyrzucony lub nieskończony: kończy segment
-		flush()
+		if i > 0 && breakAt[i] {
+			flush()
+		}
+		cur = append(cur, Point{X: xs[i], Y: clamped[i]})
 	}
+	flush()
 
 	return &Plot{
-		Formula:    formula,
-		XMin:       xmin,
-		XMax:       xmax,
-		Samples:    samples,
-		Segments:   segments,
-		Asymptotes: asymptotes,
-		YClamp:     clampThresh,
+		Formula:          formula,
+		XMin:             xmin,
+		XMax:             xmax,
+		Samples:          samples,
+		SamplesRequested: samplesRequested,
+		Segments:         segments,
+		Asymptotes:       asymptotes,
+		YClamp:           clampThresh,
 	}, nil
 }

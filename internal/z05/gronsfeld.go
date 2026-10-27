@@ -11,6 +11,10 @@
 //	jawny:       computer science
 //	szyfrogram:  fpop whsbsilhoee
 //
+// Normalizacja (małe litery + usuwanie znaków spoza alfabetu) NIE jest
+// niema: Encrypt/Decrypt/Break zwracają zbiór unikalnych znaków, które
+// zostały pominięte, więc „ZAŻÓŁĆ GĘŚLĄ” nie znika bez śladu.
+//
 // Atak słownikowy wylicza kolejne kandydackie klucze (1-cyfrowe,
 // 2-cyfrowe, ...), odszyfrowuje nimi szyfrogram i sprawdza, czy ponad
 // 80% słów wyniku znajduje się w słowniku angielskim. Słownik
@@ -25,6 +29,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -38,6 +43,15 @@ const Alphabet = " abcdefghijklmnopqrstuvwxyz"
 // MaxKeyLen — maksymalna długość klucza (w zadaniu: dłużność < 10).
 const MaxKeyLen = 9
 
+// BreakCapDefault — capKeys stosowany, gdy żądający poda wartość <= 0.
+const BreakCapDefault = int64(2_000_000)
+
+// BreakCapMax — twardy sufit liczby wypróbowanych kluczy w ataku.
+// Powyżej niego capKeys jest PRZYCINANY, a wynik ustawia CapApplied=true
+// (dawniej cięcie było nieme: caller nie wiedział, że atak skończył się
+// na suficie, a nie na wyczerpaniu przestrzeni kluczy).
+const BreakCapMax = int64(100_000_000)
+
 // Dictionary — słownik angielskich słów (zbiór).
 var Dictionary = func() map[string]struct{} {
 	m := make(map[string]struct{}, 30000)
@@ -50,21 +64,40 @@ var Dictionary = func() map[string]struct{} {
 	return m
 }()
 
-// normalizeText przygotowuje tekst do szyfrowania: zamienia małe litery,
-// usuwa znaki niebędące w alfabecie. Zwraca błąd, jeśli po normalizacji
-// tekst jest pusty.
-func normalizeText(text string) (string, error) {
+// normalizeText przygotowuje tekst do szyfrowania: zamienia na małe litery
+// i usuwa znaki spoza alfabetu (czyli wszystko poza „a–z” i spacją).
+//
+// Drugi wynik to POSORTOWANY po punkcie kodowym Unicode zbiór unikalnych
+// znaków pominiętych — w pisowni po normalizacji (małe litery), bo na tym
+// alfabecie pracuje szyfr. Gdy tekst mieścił się w alfabecie, zbiór jest
+// pusty. Dawniej normalizacja była cicha: „ZAŻÓŁĆ GĘŚLĄ” dawało 200 OK z
+// wynikiem „  ” i siedem polskich liter zniknęło bez śladu.
+//
+// Trzeci wynik to błąd, jeśli po normalizacji nie zostało nic do zaszyfrowania.
+func normalizeText(text string) (string, []string, error) {
 	var b strings.Builder
+	seen := map[rune]struct{}{}
+	var dropped []rune
 	for _, r := range strings.ToLower(text) {
 		if r >= 'a' && r <= 'z' || r == ' ' {
 			b.WriteRune(r)
+			continue
+		}
+		if _, ok := seen[r]; !ok {
+			seen[r] = struct{}{}
+			dropped = append(dropped, r)
 		}
 	}
 	out := b.String()
 	if out == "" {
-		return "", fmt.Errorf("tekst nie zawiera żadnych liter a–z")
+		return "", nil, fmt.Errorf("tekst nie zawiera żadnych liter a–z")
 	}
-	return out, nil
+	sort.Slice(dropped, func(i, j int) bool { return dropped[i] < dropped[j] })
+	skipped := make([]string, len(dropped))
+	for i, r := range dropped {
+		skipped[i] = string(r)
+	}
+	return out, skipped, nil
 }
 
 // validateKey sprawdza klucz: cyfry 0–9, długość 1..MaxKeyLen.
@@ -81,37 +114,42 @@ func validateKey(key string) error {
 }
 
 // Encrypt szyfruje tekst kluczem cyfrowym.
-func Encrypt(text, key string) (string, error) {
-	t, err := normalizeText(text)
+//
+// Zwraca szyfrogram, posortowany zbiór znaków POMINIĘTYCH przy normalizacji
+// (pusty, gdy tekst był w całości w alfabecie) oraz błąd.
+func Encrypt(text, key string) (string, []string, error) {
+	t, skipped, err := normalizeText(text)
 	if err != nil {
-		return "", err
+		return "", skipped, err
 	}
 	if err := validateKey(key); err != nil {
-		return "", err
+		return "", skipped, err
 	}
 	out := make([]rune, len(t))
 	for i, r := range t {
 		iAl := strings.IndexRune(Alphabet, r)
 		out[i] = rune(Alphabet[(iAl+int(key[i%len(key)]-'0'))%len(Alphabet)])
 	}
-	return string(out), nil
+	return string(out), skipped, nil
 }
 
 // Decrypt deszyfruje szyfrogram kluczem cyfrowym.
-func Decrypt(cipher, key string) (string, error) {
-	t, err := normalizeText(cipher)
+// Zwraca tekst jawny, posortowany zbiór znaków pominiętych przy normalizacji
+// oraz błąd.
+func Decrypt(cipher, key string) (string, []string, error) {
+	t, skipped, err := normalizeText(cipher)
 	if err != nil {
-		return "", err
+		return "", skipped, err
 	}
 	if err := validateKey(key); err != nil {
-		return "", err
+		return "", skipped, err
 	}
 	out := make([]rune, len(t))
 	for i, r := range t {
 		iAl := strings.IndexRune(Alphabet, r)
 		out[i] = rune(Alphabet[(iAl-int(key[i%len(key)]-'0')+len(Alphabet))%len(Alphabet)])
 	}
-	return string(out), nil
+	return string(out), skipped, nil
 }
 
 // BreakProgress — postęp ataku słownikowego.
@@ -131,6 +169,13 @@ type BreakResult struct {
 	Key       string `json:"key,omitempty"`
 	KeysTried int64  `json:"keysTried"`
 	TimeMs    int64  `json:"timeMs"`
+	// Skipped — unikalne znaki pominięte przy normalizacji szyfrogramu
+	// (posortowane po punkcie kodowym), nieobecne gdy tekst był w alfabecie.
+	Skipped []string `json:"skipped,omitempty"`
+	// CapApplied — prawda, gdy żądany capKeys był > BreakCapMax i został
+	// przycięty do sufitu; atak skończył się wtedy na suficie, nie na
+	// wyczerpaniu przestrzeni kluczy.
+	CapApplied bool `json:"capApplied,omitempty"`
 }
 
 // breakKey odszyfrowuje szyfrogram podanym kluczem i sprawdza
@@ -161,21 +206,25 @@ func breakKey(cipher string, key string) (string, bool) {
 
 // Break atakuje szyfrogram klucze o długościach 1..maxLen, wyliczane w
 // kolejności leksykograficznej (tak jak itertools.product w Pythonie).
-// capKeys ogranicza całkowitą liczbę wypróbowanych kluczy (bezpieczeństwo).
+// capKeys ogranicza całkowitą liczbę wypróbowanych kluczy (bezpieczeństwo):
+// wartość <= 0 daje BreakCapDefault, a wartość > BreakCapMax jest przycinana
+// do sufitu — wtedy wynik ma CapApplied=true (nic nie jest przycinane po cichu).
 // onTick jest wywoływany z postęgiem ~50 razy na sekundę.
 func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick func(BreakProgress)) (BreakResult, error) {
-	t, err := normalizeText(cipher)
+	t, skipped, err := normalizeText(cipher)
 	if err != nil {
-		return BreakResult{}, err
+		return BreakResult{Skipped: skipped}, err
 	}
 	if maxLen < 1 || maxLen > MaxKeyLen {
-		return BreakResult{}, fmt.Errorf("maxLen musi być z 1..%d", MaxKeyLen)
+		return BreakResult{Skipped: skipped}, fmt.Errorf("maxLen musi być z 1..%d", MaxKeyLen)
 	}
+	capApplied := false
 	if capKeys <= 0 {
-		capKeys = 2_000_000
+		capKeys = BreakCapDefault
 	}
-	if capKeys > 100_000_000 {
-		capKeys = 100_000_000
+	if capKeys > BreakCapMax {
+		capKeys = BreakCapMax
+		capApplied = true
 	}
 	if onTick == nil {
 		onTick = func(BreakProgress) {}
@@ -198,11 +247,12 @@ func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick
 		buf := make([]byte, l)
 		for v := int64(0); v < limit; v++ {
 			if ctx.Err() != nil {
-				return BreakResult{}, ctx.Err()
+				return BreakResult{Skipped: skipped, CapApplied: capApplied}, ctx.Err()
 			}
 			if keysTried >= capKeys {
 				notify(l, false, "", "", true)
-				return BreakResult{Found: false, KeysTried: keysTried, TimeMs: timeMs()}, nil
+				return BreakResult{Found: false, KeysTried: keysTried, TimeMs: timeMs(),
+					Skipped: skipped, CapApplied: capApplied}, nil
 			}
 			// zapisz v jako l-cyfrowy łańcuch z zerami
 			x := v
@@ -214,7 +264,8 @@ func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick
 			keysTried++
 			if ok {
 				notify(l, true, plain, string(buf), true)
-				return BreakResult{Found: true, Plain: plain, Key: string(buf), KeysTried: keysTried, TimeMs: timeMs()}, nil
+				return BreakResult{Found: true, Plain: plain, Key: string(buf), KeysTried: keysTried,
+					TimeMs: timeMs(), Skipped: skipped, CapApplied: capApplied}, nil
 			}
 			if keysTried%500_000 == 0 {
 				notify(l, false, "", "", false)
@@ -222,5 +273,6 @@ func Break(ctx context.Context, cipher string, maxLen int, capKeys int64, onTick
 		}
 	}
 	notify(maxLen, false, "", "", true)
-	return BreakResult{Found: false, KeysTried: keysTried, TimeMs: timeMs()}, nil
+	return BreakResult{Found: false, KeysTried: keysTried, TimeMs: timeMs(),
+		Skipped: skipped, CapApplied: capApplied}, nil
 }

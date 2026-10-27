@@ -165,8 +165,12 @@ cython_debug/
 bin/
 screenshots/
 
-# katalog pomocniczy weryfikacji w przeglądarce
-.ab-tmp/
+# Artefakty Go: skompilowane testy, pokrycie, binarka z `go build` w katalogu
+# głównym. Wzorzec `/wdi-server` jest zakotwiczony w korzeniu — bez ukośnika
+# ignorowałby także katalog źródłowy `cmd/wdi-server/`.
+*.test
+coverage.out
+/wdi-server
 
 # narzędzia weryfikacji w przeglądarce
 .verify/

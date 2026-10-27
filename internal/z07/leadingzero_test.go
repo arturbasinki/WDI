@@ -5,7 +5,7 @@ import "testing"
 // Regression: reguła braku zera wiodącego nie miała testu regulującego —
 // dla „AB - CD = EF” daje 476 rozwiązań, po jej usunięciu byłoby 692.
 func TestLeadingZeroRule(t *testing.T) {
-	res, err := Solve("AB - CD = EF")
+	res, err := Solve("AB - CD = EF", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

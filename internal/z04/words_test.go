@@ -8,7 +8,10 @@ import "testing"
 // wojski 89, potem 86, teraz 83, niech 76, kiedy 74,
 // jeśli 73, który 72, nawet 71, znowu 71, wszystko 67.
 func TestTop20PanTadeusz(t *testing.T) {
-	top := TopWords(PanTadeusz(), 20)
+	top, err := TopWords(PanTadeusz(), 20)
+	if err != nil {
+		t.Fatalf("TopWords: %v", err)
+	}
 	if len(top) != 20 {
 		t.Fatalf("oczekiwano 20 słów, jest %d", len(top))
 	}
@@ -21,6 +24,48 @@ func TestTop20PanTadeusz(t *testing.T) {
 	want5 := "tadeusz"
 	if top[4].Word != want5 {
 		t.Errorf("piąte słowo: %v, oczekiwano %q", top[4].Word, want5)
+	}
+}
+
+// TestTopWordsRejectsNonPositiveK — k <= 0 jest błędem, a nie cichym „20”
+// (poprzednio TopWords(tekst, 0) i TopWords(tekst, -5) zwracały 20 wyników).
+func TestTopWordsRejectsNonPositiveK(t *testing.T) {
+	for _, k := range []int{0, -1, -100} {
+		out, err := TopWords("abcdef abcdef ghijkl", k)
+		if err == nil {
+			t.Errorf("k=%d: oczekiwano błędu, zwrócono %d wyników", k, len(out))
+		}
+		if out != nil {
+			t.Errorf("k=%d: przy błędzie spodziewano się nil, jest %v", k, out)
+		}
+	}
+	// k = 1 jest legalne i zwraca dokładnie jeden wynik.
+	one, err := TopWords("abcdef abcdef ghijkl", 1)
+	if err != nil || len(one) != 1 || one[0].Word != "abcdef" {
+		t.Errorf("k=1: %v, %v (oczekiwano [abcdef])", one, err)
+	}
+}
+
+// TestDefaultTop — jawna stała domyślna (20) zgodna z treścią zadania.
+func TestDefaultTop(t *testing.T) {
+	if DefaultTop != 20 {
+		t.Fatalf("DefaultTop = %d, oczekiwano 20", DefaultTop)
+	}
+	a, err := TopWords(PanTadeusz(), DefaultTop)
+	if err != nil {
+		t.Fatalf("TopWords(DefaultTop): %v", err)
+	}
+	b, err := TopWords(PanTadeusz(), 20)
+	if err != nil {
+		t.Fatalf("TopWords(20): %v", err)
+	}
+	if len(a) != len(b) {
+		t.Fatalf("różna liczba wyników: %d vs %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("różnica na pozycji %d: %v vs %v", i, a[i], b[i])
+		}
 	}
 }
 

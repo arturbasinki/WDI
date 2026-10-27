@@ -11,7 +11,11 @@
   --border-soft: #1e2635;
   --text: #e7ecf3;
   --muted: #93a0b4;
-  --muted-2: #6b7789;
+  /* --muted-2 — drobny tekst pomocniczy (podpisy osi, liczniki pozycji, legendy).
+     WCAG 2.1 AA dla tekstu <18 px wymaga ≥ 4,5:1. Poprzednie #6b7789 dawało
+     4,17:1 na tle strony i 3,55–3,84:1 na kartach — poniżej progu.
+     #8a97ab: 6,39:1 na --bg, 5,89:1 na --panel, 5,44:1 na --panel-2. */
+  --muted-2: #8a97ab;
   --ok: #3ecf8e;
   --warn: #f7b94f;
   --err: #f76e6e;
@@ -315,6 +319,10 @@ textarea {
   font-family: var(--mono);
   flex-wrap: wrap;
 }
+
+/* komunikat o przerwaniu odpytywania (utracone połączenie) w obrębie paska joba */
+.jobmsg:empty { display: none; }
+.jobmsg .banner { margin-top: 10px; }
 
 /* ---------- tabele ---------- */
 

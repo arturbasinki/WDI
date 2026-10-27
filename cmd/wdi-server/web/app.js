@@ -49,34 +49,109 @@ async function api(method, url, body) {
   return j;
 }
 
-/* aktywne pollery — czyszczone przy zmianie widoku */
-let activePollers = [];
-function stopPollers() {
-  activePollers.forEach((id) => clearInterval(id));
-  activePollers = [];
+/* ------- rejestr dyspozytorów bieżącego widoku -------
+   Wszystko, co widok zostawia poza sobą (intery, słuchacze dokumentu,
+   pollery, aktywne joby), musi być wyrejestrowane przy zmianie routu.
+   Dysponenci są wołani w route() — bez timerów globalnych i bez wycieków. */
+let disposers = [];
+
+/* onLeave — rejestruje sprzątanie bieżącego widoku. */
+function onLeave(fn) {
+  disposers.push(fn);
 }
+
+function runDisposers() {
+  const list = disposers;
+  disposers = [];
+  for (const fn of list) {
+    try {
+      fn();
+    } catch (_) {
+      /* sprzątanie nie może wywrócić zmiany routu */
+    }
+  }
+}
+
+/* poll — interwał z uchwytem: zwraca stop() i sam się wypina z rejestru.
+   Callback dostaje stop(), żeby mógł zakończyć pętlę (job zakończony, błąd). */
 function poll(fn, ms) {
-  const id = setInterval(fn, ms);
-  activePollers.push(id);
-  return id;
+  let stopped = false;
+  let id = 0;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(id);
+  };
+  onLeave(stop);
+  id = setInterval(() => {
+    if (stopped) {
+      stop();
+      return;
+    }
+    fn(stop);
+  }, ms);
+  return stop;
 }
 
-/* ---------------------------- meta ---------------------------- */
+/* ---------------------------- meta ----------------------------
+   Katalog zadań ma JEDNO źródło: rejestr w Go (GET /api/tasks). Frontend nie
+   trzyma własnej kopii tytułów ani opisów — pobiera listę raz na czas życia
+   strony (cache w domknięciu modułu) i z niej buduje zarówno kafelki startowe,
+   jak i nagłówki podstron. W JS zostaje to, co jest kodem, a nie danymi:
+   mapowanie trasa → funkcja renderująca (VIEWS) oraz akcent kolorystyczny. */
 
-const TASKS = {
-  z01: { accent: "#4f9cf7", title: "Układ równań liniowych" },
-  z02: { accent: "#f7b94f", title: "Liczby Armstronga" },
-  z03: { accent: "#4fd78f", title: "Sito Eratostenesa" },
-  z04: { accent: "#e36ea8", title: "Częstotliwość słów" },
-  z05: { accent: "#b478f7", title: "Szyfr Gronsfelda" },
-  z06: { accent: "#4fd7d7", title: "Wykresy funkcji" },
-  z07: { accent: "#f78f4f", title: "Zagadki literowo-cyfrowe" },
-  z08: { accent: "#8f9cf7", title: "Generator sudoku" },
+// Akcenty — wyłącznie prezentacja; te dane nie istnieją w rejestrze Go.
+const ACCENTS = {
+  z01: "#4f9cf7", z02: "#f7b94f", z03: "#4fd78f", z04: "#e36ea8",
+  z05: "#b478f7", z06: "#4fd7d7", z07: "#f78f4f", z08: "#8f9cf7",
 };
+const ACCENT_FALLBACK = "#4f9cf7";
+
+const accentOf = (id) => ACCENTS[id] || ACCENT_FALLBACK;
+
+let catalog = null;           // cache odpowiedzi GET /api/tasks
+const catalogById = new Map();
+
+// loadCatalog — jeden request na czas życia strony; każdy widok dostaje
+// te same tytuły/opisy, co kafelki. Błąd sieci idzie do wołającego (banner).
+async function loadCatalog() {
+  if (catalog) return catalog;
+  const list = (await api("GET", "/api/tasks")).tasks;
+  catalog = list;
+  for (const t of list) catalogById.set(t.id, t);
+  return catalog;
+}
+
+// taskTitle — tytuł z katalogu API. Brak wpisu => sam identyfikator trasy:
+// świadomie NIE kopiujemy tu tekstu, bo duplikat zawsze by się rozjechał.
+function taskTitle(id) {
+  const t = catalogById.get(id);
+  return t ? t.title : id;
+}
+
+// taskHead — nagłówek podstrony: plakietka z id + tytuł z katalogu API.
+function taskHead(id) {
+  return `<div class="task-head"><span class="badge">${esc(id)}</span><h2>${esc(taskTitle(id))}</h2></div>`;
+}
 
 function setAccent(view, id) {
-  view.style.setProperty("--accent", TASKS[id].accent);
+  view.style.setProperty("--accent", accentOf(id));
 }
+
+/* Stan pomocniczy widoków mieszka w domknięciu modułu — dawniej był to
+   niejawny duet globali na oknie przeglądarki ("__capKeys" i "__sol"), czyli
+   dwa anonimowe kanały zapisywalne z konsoli. Zastępuje je JEDNO nazwane API
+   deweloperskie — window.wdiDebug — tylko do odczytu; writerem pozostaje UI.
+     capKeys  — sufit przyjęty przez ostatnie zlecenie (z02, z05),
+     solution — ostatnie wygenerowane rozwiązanie sudoku (z08),
+     tasks    — id zadań z katalogu API. */
+const devState = { capKeys: 2e6, solution: null };
+
+window.wdiDebug = Object.freeze({
+  get capKeys() { return devState.capKeys; },
+  get solution() { return devState.solution; },
+  tasks: () => (catalog ? catalog.map((t) => t.id) : []),
+});
 
 function banner(cls, html) {
   return `<div class="banner ${cls}">${html}</div>`;
@@ -89,35 +164,73 @@ function panel(html, h4) {
 function jobBox() {
   return `
   <div class="jobbox" hidden>
-    <div class="pbar"><i></i></div>
-    <div class="jobstatus"><span class="what">…</span><span class="pct"></span></div>
+    <div class="pbar" role="progressbar" aria-label="postęp obliczeń"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+    <div class="jobstatus" role="status" aria-live="polite"><span class="what">…</span><span class="pct"></span></div>
+    <div class="jobmsg"></div>
     <div class="actions">
       <button class="btn danger small cancel-btn" type="button">Przerwij</button>
     </div>
   </div>`;
 }
 
-function startJob(el, jobId, cancelUrl) {
+/* startJob — pasek postępu + odpytywanie statusu joba.
+   · Przy zmianie routu (onLeave): zatrzymuje poller, anuluje aktywny job
+     (DELETE na serwerze) i blokuje onSettled — widok już nie żyje.
+   · Błąd fetch w pętli: komunikat w UI + zatrzymanie pętli (inaczej pasek
+     postępu wisi w nieskończoność bez żadnego sygnału). */
+function startJob(el, jobId, jobUrl) {
   const box = $(".jobbox", el);
-  box.hidden = false;
   const acts = $(".actions", box);
+  const msg = $(".jobmsg", box);
+  const bar = $(".pbar > i", box);
+  const pbar = $(".pbar", box);
+  const what = $(".what", box);
+  const pct = $(".pct", box);
+  box.hidden = false;
   acts.hidden = false; // box jest współdzielony między uruchomieniami
-  $(".cancel-btn", box).onclick = async () => {
-    try { await fetch(cancelUrl, { method: "DELETE" }); } catch (_) {}
+  msg.innerHTML = "";
+  /* setProgress — JEDNO miejsce ustawiające pasek: szerokość wypełnienia,
+     procent przy pasku i aria-valuenow wskaźnika role="progressbar".
+     Bez tego czytnik ekranu słyszał zawsze „0”. */
+  const setProgress = (frac) => {
+    const v = Math.round(100 * Math.min(1, Math.max(0, frac)));
+    bar.style.width = v + "%";
+    pct.textContent = v + " %";
+    pbar.setAttribute("aria-valuenow", String(v));
+    return v;
   };
-  poll(async () => {
+  $(".cancel-btn", box).onclick = async () => {
+    try { await fetch(jobUrl, { method: "DELETE" }); } catch (_) {}
+  };
+
+  let disposed = false; // wyszliśmy z widoku: nie dotykamy DOM i nie wołamy onSettled
+  let settled = false;  // job zakończony: przy odejściu nie ma czego anulować
+  let onJobSettled = () => {};
+
+  const stop = poll(async () => {
+    if (disposed) { stop(); return; }
     let s;
-    try { s = await api("GET", cancelUrl); } catch (_) { return; }
-    const bar = $(".pbar > i", box);
-    const what = $(".what", box);
-    const pct = $(".pct", box);
+    try {
+      s = await api("GET", jobUrl);
+    } catch (e) {
+      stop();
+      if (disposed) return;
+      what.textContent = "błąd połączenia";
+      acts.hidden = true;
+      msg.innerHTML = banner("err",
+        "Utracono połączenie z serwerem — odpytywanie przerwane: " + esc(e.message) +
+        ". Odśwież stronę i spróbuj ponownie.");
+      return;
+    }
+    if (disposed) return;
     if (s.status === "done" || s.status === "error" || s.status === "cancelled") {
-      stopPollers();
+      stop();
+      settled = true;
       // job zakończony: chowamy „Przerwij”, pokazujemy stan końcowy
       acts.hidden = true;
       if (s.status === "done") {
-        bar.style.width = "100%";
-        pct.textContent = "100 %";
+        setProgress(1);
         what.textContent = "zakończono";
       } else {
         what.textContent = s.status === "cancelled" ? "przerwano" : "błąd";
@@ -127,6 +240,17 @@ function startJob(el, jobId, cancelUrl) {
       renderProgress(s.progress);
     }
   }, 600);
+
+  onLeave(() => {
+    disposed = true;
+    stop();
+    // odjeżdżamy z routu — aktywny job nie ma odbiorcy: anulujemy go na serwerze
+    if (!settled) {
+      try {
+        fetch(jobUrl, { method: "DELETE", keepalive: true }).catch(() => {});
+      } catch (_) {}
+    }
+  });
 
   function renderProgress(p) {
     let frac = 0, whatTxt = "";
@@ -138,14 +262,12 @@ function startJob(el, jobId, cancelUrl) {
       whatTxt = "pomiary: " + p.done + " / " + p.total +
         (p.last ? ` · ostatni: ${p.last.structure} n=${fmtInt(p.last.n)} ${fmtSec(p.last.seconds)}` : "");
     } else if ("keysTried" in p) {
-      frac = Math.min(1, p.keysTried / (window.__capKeys || 2e6));
+      frac = Math.min(1, p.keysTried / (devState.capKeys || 2e6));
       whatTxt = `wypróbowano ${fmtInt(p.keysTried)} kluczy (długość ${p.len})`;
     }
-    bar.style.width = (100 * Math.min(1, frac)).toFixed(1) + "%";
-    pct.textContent = (100 * Math.min(1, frac)).toFixed(1) + " %";
+    setProgress(frac);
     what.textContent = whatTxt;
   }
-  let onJobSettled = () => {};
   return {
     set onSettled(fn) { onJobSettled = fn; },
   };
@@ -155,8 +277,14 @@ function startJob(el, jobId, cancelUrl) {
 
 const VIEWS = {};
 
-function route() {
-  stopPollers();
+/* route — zmiana routu. Przed renderem dokłada katalog z API (nagłówek
+   podstrony bierze tytuł z jednego źródła). routeSeq pilnuje, żeby wolniejsza
+   odpowiedź starszego routu nie nadpisała nowszego widoku. */
+let routeSeq = 0;
+
+async function route() {
+  const seq = ++routeSeq;
+  runDisposers();
   const h = (location.hash || "#/").replace(/^#\//, "");
   const view = $("#view");
   view.innerHTML = "";
@@ -168,6 +296,14 @@ function route() {
   }
   ctx.textContent = "zadanie " + h;
   setAccent(view, h);
+  try {
+    await loadCatalog();
+  } catch (e) {
+    if (seq !== routeSeq) return;
+    view.innerHTML = banner("err", "Nie udało się pobrać spisu zadań: " + esc(e.message));
+    return;
+  }
+  if (seq !== routeSeq) return; // nowszy rout wygrał — nie nadpisujemy
   VIEWS[h](view);
 }
 
@@ -184,7 +320,7 @@ async function renderHome(view) {
     <div class="tiles" id="tiles"><div class="muted">Ładowanie…</div></div>`;
   let tasks;
   try {
-    tasks = (await api("GET", "/api/tasks")).tasks;
+    tasks = await loadCatalog();
   } catch (e) {
     $("#tiles", view).innerHTML = banner("err", "Nie udało się połączyć z API: " + esc(e.message));
     return;
@@ -192,8 +328,8 @@ async function renderHome(view) {
   $("#tiles", view).innerHTML = tasks
     .map(
       (t) => `
-    <a class="tile" href="#/${t.id}" style="--tile-accent:${TASKS[t.id].accent}">
-      <div class="num">ZADANIE ${t.num}</div>
+    <a class="tile" href="#/${t.id}" style="--tile-accent:${accentOf(t.id)}">
+      <div class="num">ZADANIE ${esc(t.num)}</div>
       <h3>${esc(t.title)}</h3>
       <p>${esc(t.tag)}</p>
       <div class="go">otwórz →</div>
@@ -209,7 +345,7 @@ async function renderHome(view) {
 VIEWS.z01 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z01</span><h2>Układ równań liniowych</h2></div>
+  ${taskHead("z01")}
   ${panel(`
   <p class="desc mt0">Rozwiązujemy układ <b>N równań liniowych o N niewiadomych</b> metodą
   <b>eliminacji Gaussa z wyborem wiodącego (Gauss-Jordan)</b>. Dane wczytywane są z pliku tekstowego:
@@ -218,22 +354,27 @@ VIEWS.z01 = (view) => {
   lub <b>nieoznaczony</b> (nieskończenie wiele rozwiązań, podanych parametrycznie przez niewiadome wolne).
   Krok po kroku pokazujemy operacje na wierszach (animacja redukcji do postaci RREF).</p>`, "Opis rozwiązania")}
   ${panel(`
-  <label class="field">Dane układu (format pliku: N, potem N wierszy po N+1 liczb)</label>
+  <label class="field" for="in-text">Dane układu (format pliku: N, potem N wierszy po N+1 liczb)</label>
   <textarea id="in-text" rows="5">3
 1 2 3 7
 -1 2 4 6
 2 1 1 13</textarea>
   <div class="preset-row">
-    <button data-p="3\\n1 2 3 7\\n-1 2 4 6\\n2 1 1 13">przykład z zadania</button>
-    <button data-p="2\\n1 1 3\\n2 2 6">nieoznaczony</button>
-    <button data-p="2\\n2 1 1\\n4 2 6">sprzeczny</button>
+    <button data-p="3\\n1 2 3 7\\n-1 2 4 6\\n2 1 1 13" type="button">przykład z zadania</button>
+    <button data-p="2\\n1 1 3\\n2 2 6" type="button">nieoznaczony</button>
+    <button data-p="2\\n2 1 1\\n4 2 6" type="button">sprzeczny</button>
   </div>
-  <div class="actions"><button class="btn" id="run">Rozwiąż</button></div>
+  <div class="actions"><button class="btn" id="run" type="button">Rozwiąż</button></div>
   <div id="out"></div>`)}
   `
   ;
   const out = $("#out", view);
   let steps = [], stepIdx = 0, playTimer = null;
+  // animacja kroców musi umrzeć razem z widokiem (inaczej interwał tyka
+  // po zmianie routu i pisze do martwego DOM)
+  onLeave(() => {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  });
 
   const drawMatrix = (m, rrefPivots) => {
     const n = m.length;
@@ -344,7 +485,7 @@ VIEWS.z01 = (view) => {
 VIEWS.z02 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z02</span><h2>Liczby Armstronga</h2></div>
+  ${taskHead("z02")}
   ${panel(`
   <p class="desc mt0">Liczba Armstronga to N-cyfrowa liczba naturalna równa sumie swoich cyfr
   podniesionych do potęgi N (np. <code>153 = 1³+5³+3³</code>). Program przeszukuje przedział
@@ -355,7 +496,7 @@ VIEWS.z02 = (view) => {
   ${panel(`
   <div class="row">
     <div>
-      <label class="field">Limit przeszukiwania (do 10¹²)</label>
+      <label class="field" for="limit">Limit przeszukiwania (do 10¹²)</label>
       <select id="limit">
         <option value="1000000">1 000 000 (10⁶) — ok. 1 s</option>
         <option value="10000000">10 000 000 (10⁷) — ok. 2 s</option>
@@ -368,7 +509,7 @@ VIEWS.z02 = (view) => {
     </div>
   </div>
   <div class="actions">
-    <button class="btn" id="run">Szukaj</button>
+    <button class="btn" id="run" type="button">Szukaj</button>
     <span class="muted">wyniki pojawiają się na bieżąco</span>
   </div>
   ${jobBox()}
@@ -384,7 +525,7 @@ VIEWS.z02 = (view) => {
   $("#run", view).onclick = async () => {
     const limit = parseInt($("#limit", view).value, 10);
     cap = 2e6;
-    window.__capKeys = 2e6;
+    devState.capKeys = 2e6;
     found = [];
     foundEl.innerHTML = "";
     let handle;
@@ -399,7 +540,6 @@ VIEWS.z02 = (view) => {
       if (s.status === "done" && s.result) {
         found = s.result.found || [];
         renderFound();
-        $(".pbar > i", view).style.width = "100%";
       } else if (s.status === "error") {
         foundEl.insertAdjacentHTML("beforeend", banner("err", esc(s.error)));
       }
@@ -451,7 +591,7 @@ VIEWS.z03 = (view) => {
   const Ns = [1e3, 1e4, 1e5, 1e6, 1e7, 1e8];
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z03</span><h2>Sito Eratostenesa</h2></div>
+  ${taskHead("z03")}
   ${panel(`
   <p class="desc mt0">Trzy implementacje sita, jak w zadaniu (w Pythonie: lista, słownik, tablica numpy —
   tutaj ich odpowiedniki w Go):
@@ -463,11 +603,11 @@ VIEWS.z03 = (view) => {
   Dla każdej struktury mierzony jest czas i liczba liczb pierwszych dla n = 10³…10⁸;
   wyniki porównujemy w tabeli i na wykresie (skala logarytmiczna).</p>`, "Opis rozwiązania")}
   ${panel(`
-  <label class="field">Wartości n do pomiaru</label>
+  <label class="field" for="ns-1000">Wartości n do pomiaru</label>
   <div class="preset-row" id="ns">
-    ${Ns.map((n) => `<label class="chip" style="cursor:pointer"><input type="checkbox" value="${n}" ${n <= 1e7 ? "checked" : ""} style="margin-right:6px">10${sup(Math.log10(n))}</label>`).join("")}
+    ${Ns.map((n) => `<label class="chip" for="ns-${n}" style="cursor:pointer"><input type="checkbox" id="ns-${n}" value="${n}" ${n <= 1e7 ? "checked" : ""} style="margin-right:6px">10${sup(Math.log10(n))}</label>`).join("")}
   </div>
-  <div class="actions"><button class="btn" id="run">Zmierz czasy</button></div>
+  <div class="actions"><button class="btn" id="run" type="button">Zmierz czasy</button></div>
   ${jobBox()}
   <div id="out"></div>`)}
   `
@@ -564,7 +704,7 @@ VIEWS.z03 = (view) => {
 VIEWS.z04 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z04</span><h2>Częstotliwość słów</h2></div>
+  ${taskHead("z04")}
   ${panel(`
   <p class="desc mt0">Program wczytuje tekst, <b>ignoruje słowa krótsze niż 5 liter</b> (typu „i”, „lub”,
   „się”, „aby”, „żeby”) i wypisuje <b>20 najczęściej występujących słów</b> (zliczanie bez różnicowania
@@ -573,9 +713,9 @@ VIEWS.z04 = (view) => {
   Można też wkleić własny tekst i policzyć jego słowa.</p>`, "Opis rozwiązania")}
   ${panel(`<div class="muted" id="builtin">Ładowanie top 20 dla „Pana Tadeusza”…</div>`, "Top 20 — „Pan Tadeusz” (Mickiewicz)")}
   ${panel(`
-  <label class="field">Własny tekst</label>
+  <label class="field" for="text">Własny tekst</label>
   <textarea id="text" rows="5" placeholder="Wklej dowolny tekst…"></textarea>
-  <div class="actions"><button class="btn" id="run">Zlicz słowa</button></div>
+  <div class="actions"><button class="btn" id="run" type="button">Zlicz słowa</button></div>
   <div id="out"></div>`)}
   `
   ;
@@ -621,7 +761,7 @@ VIEWS.z04 = (view) => {
 VIEWS.z05 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z05</span><h2>Szyfr Gronsfelda</h2></div>
+  ${taskHead("z05")}
   ${panel(`
   <p class="desc mt0">Szyfr Gronsfelda to modyfikacja szyfru Cezara z <b>kluczem liczbowym</b>: kolejne litery
   przesuwane są o kolejne cyfry klucza (klucz cykluje się po swojej długości). Alfabet ma 27 znaków:
@@ -632,31 +772,31 @@ VIEWS.z05 = (view) => {
   słowniku angielskim (25 991 słów, go:embed). Pierwszy pasujący klucz wygrywa.</p>`, "Opis rozwiązania")}
   ${panel(`
   <div class="tabs" id="tabs">
-    <button data-t="enc" class="active">Szyfruj</button>
-    <button data-t="dec">Deszyfruj</button>
-    <button data-t="break">Złam szyfrogram</button>
+    <button data-t="enc" class="active" type="button">Szyfruj</button>
+    <button data-t="dec" type="button">Deszyfruj</button>
+    <button data-t="break" type="button">Złam szyfrogram</button>
   </div>
   <div id="tab-enc">
     <div class="row">
-      <div><label class="field">Tekst jawny</label><input type="text" id="enc-text" value="computer science"></div>
-      <div><label class="field">Klucz (cyfry 0–9, 1–9 cyfr)</label><input type="text" id="enc-key" value="312063"></div>
+      <div><label class="field" for="enc-text">Tekst jawny</label><input type="text" id="enc-text" value="computer science"></div>
+      <div><label class="field" for="enc-key">Klucz (cyfry 0–9, 1–9 cyfr)</label><input type="text" id="enc-key" value="312063"></div>
     </div>
-    <div class="actions"><button class="btn" id="enc-run">Szyfruj</button></div>
+    <div class="actions"><button class="btn" id="enc-run" type="button">Szyfruj</button></div>
     <div id="enc-out"></div>
   </div>
   <div id="tab-dec" hidden>
     <div class="row">
-      <div><label class="field">Szyfrogram</label><input type="text" id="dec-text" value="fpop whsbsilhoee"></div>
-      <div><label class="field">Klucz</label><input type="text" id="dec-key" value="312063"></div>
+      <div><label class="field" for="dec-text">Szyfrogram</label><input type="text" id="dec-text" value="fpop whsbsilhoee"></div>
+      <div><label class="field" for="dec-key">Klucz</label><input type="text" id="dec-key" value="312063"></div>
     </div>
-    <div class="actions"><button class="btn" id="dec-run">Deszyfruj</button></div>
+    <div class="actions"><button class="btn" id="dec-run" type="button">Deszyfruj</button></div>
     <div id="dec-out"></div>
   </div>
   <div id="tab-break" hidden>
     <div class="row">
-      <div><label class="field">Szyfrogram do złamania</label>
+      <div><label class="field" for="br-cipher">Szyfrogram do złamania</label>
         <input type="text" id="br-cipher" value="axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh"></div>
-      <div><label class="field">Długość klucza</label>
+      <div><label class="field" for="br-len">Długość klucza</label>
         <select id="br-len">
           <option value="6" selected>do 6 cyfr (domyślnie — do 111 111 kluczy, szybkie)</option>
           <option value="7">do 7 cyfr</option>
@@ -665,10 +805,10 @@ VIEWS.z05 = (view) => {
         </select></div>
     </div>
     <div class="preset-row">
-      <button data-c="fpop whsbsilhoee">przykład z zadania (computer science)</button>
-      <button data-c="axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh">przysłowie z zadania</button>
+      <button data-c="fpop whsbsilhoee" type="button">przykład z zadania (computer science)</button>
+      <button data-c="axjmrlamuhnvayum jsbkvggpzgz zqmna tjpmh" type="button">przysłowie z zadania</button>
     </div>
-    <div class="actions"><button class="btn" id="br-run">Rozpocznij atak</button></div>
+    <div class="actions"><button class="btn" id="br-run" type="button">Rozpocznij atak</button></div>
     ${jobBox()}
     <div id="br-out"></div>
   </div>
@@ -685,17 +825,27 @@ VIEWS.z05 = (view) => {
     };
   });
 
+  /* skippedNote — normalizacja wycina wszystko spoza alfabetu a–z + spacja
+     i (od P2) mówi, co wycięła. Notatka jest obowiązkowa w UI: bez niej
+     „ZAŻÓŁĆ GĘŚLĄ” wygląda jak poprawne szyfrowanie dwuznakowego wyniku. */
+  const skippedNote = (skipped) =>
+    skipped && skipped.length
+      ? banner("warn",
+          `pominięte znaki: <b class="mono">${esc(skipped.join(" "))}</b> — ` +
+          `alfabet szyfru to a–z i spacja, więc te znaki nie weszły do wyniku.`)
+      : "";
+
   $("#enc-run", view).onclick = async () => {
     try {
       const d = await api("POST", "/api/z05/crypt", { mode: "enc", text: $("#enc-text", view).value, key: $("#enc-key", view).value });
-      $("#enc-out", view).innerHTML = `<div class="banner ok">Szyfrogram: <span class="mono" style="font-size:15px">${esc(d.out)}</span></div>`;
+      $("#enc-out", view).innerHTML = skippedNote(d.skipped) + `<div class="banner ok">Szyfrogram: <span class="mono" style="font-size:15px">${esc(d.out)}</span></div>`;
     } catch (e) { $("#enc-out", view).innerHTML = banner("err", esc(e.message)); }
   };
 
   $("#dec-run", view).onclick = async () => {
     try {
       const d = await api("POST", "/api/z05/crypt", { mode: "dec", text: $("#dec-text", view).value, key: $("#dec-key", view).value });
-      $("#dec-out", view).innerHTML = `<div class="banner ok">Tekst jawny: <span class="mono" style="font-size:15px">${esc(d.out)}</span></div>`;
+      $("#dec-out", view).innerHTML = skippedNote(d.skipped) + `<div class="banner ok">Tekst jawny: <span class="mono" style="font-size:15px">${esc(d.out)}</span></div>`;
     } catch (e) { $("#dec-out", view).innerHTML = banner("err", esc(e.message)); }
   };
 
@@ -705,11 +855,11 @@ VIEWS.z05 = (view) => {
 
   $("#br-run", view).onclick = async () => {
     const len = parseInt($("#br-len", view).value, 10);
-    window.__capKeys = len >= 7 ? 1e8 : 2e6;
+    devState.capKeys = len >= 7 ? 1e8 : 2e6;
     $("#br-out", view).innerHTML = "";
     let handle;
     try {
-      const { jobId } = await api("POST", "/api/z05/break", { cipher: $("#br-cipher", view).value, maxLen: len, capKeys: window.__capKeys });
+      const { jobId } = await api("POST", "/api/z05/break", { cipher: $("#br-cipher", view).value, maxLen: len, capKeys: devState.capKeys });
       handle = startJob(view, jobId, "/api/z05/break/" + jobId);
     } catch (e) {
       $("#br-out", view).innerHTML = banner("err", esc(e.message));
@@ -720,13 +870,14 @@ VIEWS.z05 = (view) => {
         const r = s.result;
         if (r.found) {
           $("#br-out", view).innerHTML =
+            skippedNote(r.skipped) +
             banner("ok", `Złamano! <div class="chips">
               <span class="chip">klucz: <b>${esc(r.key)}</b></span>
               <span class="chip">tekst jawny: <b>${esc(r.plain.trim())}</b></span></div>`) +
             `<div class="kv"><span>wypróbowano kluczy: <b>${fmtInt(r.keysTried)}</b></span>
              <span>czas: <b>${fmtSec(r.timeMs / 1000)}</b></span></div>`;
         } else {
-          $("#br-out", view).innerHTML = banner("warn",
+          $("#br-out", view).innerHTML = skippedNote(r.skipped) + banner("warn",
             `Nie znaleziono klucza po wypróbowaniu <b>${fmtInt(r.keysTried)}</b> kluczy. Spróbuj większej długości lub dłuższego szyfrogramu (więcej słów = mocniejsza weryfikacja).`);
         }
       } else if (s.status === "error") {
@@ -743,7 +894,7 @@ VIEWS.z05 = (view) => {
 VIEWS.z06 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z06</span><h2>Wykresy funkcji</h2></div>
+  ${taskHead("z06")}
   ${panel(`
   <p class="desc mt0">Wzór funkcji i przedział dla x podaje użytkownik. Wzór parsuje
   <b>własny parser wstępu rekurencyjnego</b> (analog sympy z wersji Python) — operatory
@@ -755,21 +906,21 @@ VIEWS.z06 = (view) => {
   Np. <code>1/x</code> rysuje się jako dwie gałęzie z przerywaną asymptotą w x = 0.</p>`, "Opis rozwiązania")}
   ${panel(`
   <div class="row">
-    <div style="flex:2"><label class="field">Wzór funkcji y = f(x)</label><input type="text" id="expr" value="x*x-6*x+3"></div>
-    <div><label class="field">x min</label><input type="number" id="xmin" value="0" step="any"></div>
-    <div><label class="field">x max</label><input type="number" id="xmax" value="6" step="any"></div>
-    <div><label class="field">próbki</label><input type="number" id="samples" value="1601" min="501" max="20001"></div>
+    <div style="flex:2"><label class="field" for="expr">Wzór funkcji y = f(x)</label><input type="text" id="expr" value="x*x-6*x+3"></div>
+    <div><label class="field" for="xmin">x min</label><input type="number" id="xmin" value="0" step="any"></div>
+    <div><label class="field" for="xmax">x max</label><input type="number" id="xmax" value="6" step="any"></div>
+    <div><label class="field" for="samples">próbki</label><input type="number" id="samples" value="1601" min="501" max="20001"></div>
   </div>
   <div class="preset-row">
-    <button data-e="x*x-6*x+3" data-a="0" data-b="6">x²−6x+3 (zadanie)</button>
-    <button data-e="1/x" data-a="-5" data-b="5">1/x (asymptota)</button>
-    <button data-e="tan(x)" data-a="-6.3" data-b="6.3">tan(x)</button>
-    <button data-e="sin(x)/x" data-a="-8" data-b="8">sin(x)/x</button>
-    <button data-e="1/(x-2)" data-a="0" data-b="4">1/(x−2)</button>
-    <button data-e="ln(x)" data-a="0.1" data-b="8">ln(x)</button>
-    <button data-e="x^3 - 3*x" data-a="-2.5" data-b="2.5">x³−3x</button>
+    <button data-e="x*x-6*x+3" data-a="0" data-b="6" type="button">x²−6x+3 (zadanie)</button>
+    <button data-e="1/x" data-a="-5" data-b="5" type="button">1/x (asymptota)</button>
+    <button data-e="tan(x)" data-a="-6.3" data-b="6.3" type="button">tan(x)</button>
+    <button data-e="sin(x)/x" data-a="-8" data-b="8" type="button">sin(x)/x</button>
+    <button data-e="1/(x-2)" data-a="0" data-b="4" type="button">1/(x−2)</button>
+    <button data-e="ln(x)" data-a="0.1" data-b="8" type="button">ln(x)</button>
+    <button data-e="x^3 - 3*x" data-a="-2.5" data-b="2.5" type="button">x³−3x</button>
   </div>
-  <div class="actions"><button class="btn" id="run">Rysuj</button></div>
+  <div class="actions"><button class="btn" id="run" type="button">Rysuj</button></div>
   <div id="out"></div>`)}
   `
   ;
@@ -820,7 +971,10 @@ VIEWS.z06 = (view) => {
     out.innerHTML =
       `<div class="kv"><span>wzór: <b>y = ${esc(plot.formula)}</b></span>
        <span>przedział: <b>[${fmt(plot.xmin, 3)}, ${fmt(plot.xmax, 3)}]</b></span>
-       <span>próbek: <b>${fmtInt(plot.samples)}</b></span>
+       <span>próbek: <b>${fmtInt(plot.samples)}</b>${
+         plot.samplesRequested && plot.samplesRequested !== plot.samples
+           ? ` <span class="muted">(żądano ${fmtInt(plot.samplesRequested)} — przycinamy do 501…20001)</span>`
+           : ""}</span>
        <span>odcinków: <b>${plot.segments.length}</b></span>
        <span>asymptoty: <b>${plot.asymptotes.length ? plot.asymptotes.map((a) => "x≈" + niceAsym(a)).join(", ") : "brak"}</b></span></div>
        <div class="chart-wrap">${s}</div>`;
@@ -885,7 +1039,7 @@ function niceTicks(min, max, n) {
 VIEWS.z07 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z07</span><h2>Zagadki literowo-cyfrowe</h2></div>
+  ${taskHead("z07")}
   ${panel(`
   <p class="desc mt0">Litery A–J w równaniu zastępują cyfry (np. <code>ABC · BD = EFGAH</code> →
   <code>623 · 29 = 18067</code>). Zasady: litera ↔ dokładnie jedna cyfra, liczba wielocyfrowa
@@ -895,15 +1049,15 @@ VIEWS.z07 = (view) => {
   Metoda: wyczerpujące przeszukiwanie permutacji cyfr (10P<sub>k</sub>) z cięciami
   (np. liczba cyfr iloczynu) — w Go 10P₁₀ ≈ 3,6 mln permutacji to ułamek sekundy.</p>`, "Opis rozwiązania")}
   ${panel(`
-  <label class="field">Równanie w postaci literowej</label>
+  <label class="field" for="eq">Równanie w postaci literowej</label>
   <input type="text" id="eq" value="ABC * BD = EFGAH" style="font-family:var(--mono)">
   <div class="preset-row">
-    <button data-e="ABC * BD = EFGAH">z zadania: ABC·BD = EFGAH</button>
-    <button data-e="SEND + MORE = MONEY">SEND + MORE = MONEY</button>
-    <button data-e="AB / C = DE">AB / C = DE</button>
-    <button data-e="A * BC = DEFG">A · BC = DEFG</button>
+    <button data-e="ABC * BD = EFGAH" type="button">z zadania: ABC·BD = EFGAH</button>
+    <button data-e="SEND + MORE = MONEY" type="button">SEND + MORE = MONEY</button>
+    <button data-e="AB / C = DE" type="button">AB / C = DE</button>
+    <button data-e="A * BC = DEFG" type="button">A · BC = DEFG</button>
   </div>
-  <div class="actions"><button class="btn" id="run">Rozwiąż</button></div>
+  <div class="actions"><button class="btn" id="run" type="button">Rozwiąż</button></div>
   <div id="out"></div>`)}
   `
   ;
@@ -924,7 +1078,9 @@ VIEWS.z07 = (view) => {
         return;
       }
       let html = banner("ok", `Znaleziono <b>${fmtInt(r.count)}</b> ${r.count === 1 ? "rozwiązanie" : r.count < 5 ? "rozwiązania" : "rozwiązań"}` +
-        (r.truncated ? " (pokazano pierwsze 50)" : "") + ``) +
+        (r.truncated
+          ? ` (pokazano ${fmtInt(r.solutions.length)} z ${fmtInt(r.count)} — pełna liczba jest w liczniku)`
+          : "") + ``) +
         `<div class="kv"><span>litery: <b>${r.letters}</b></span>
          <span>przestrzeń permutacji: <b>${fmtInt(r.spaceSize)}</b></span>
          <span>czas: <b>${r.timeMs} ms</b></span></div>
@@ -955,14 +1111,16 @@ VIEWS.z07 = (view) => {
 VIEWS.z08 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
-  <div class="task-head"><span class="badge">z08</span><h2>Generator sudoku</h2></div>
+  ${taskHead("z08")}
   ${panel(`
   <p class="desc mt0">Generator: (1) losowo wypełnia całą planszę 9×9 <b>backtrackingiem z losową
   kolejnością kandydatów</b>; (2) „kopie dołki” — pola w losowej kolejności są wycierane, a po każdym
   usunięciu zliczacz rozwiązań (backtracking + heurystyka MRV, maski bitowe wiersza/kolumny/bloku,
   przerwanie po 2 rozwiązaniach) sprawdza <b>unikalność</b>. Jeśli unikalność znika — pole wraca.
-  Powtarzamy, aż żadne pole nie da się usunąć: zagadka ma <b>dokładnie jedno rozwiązanie i maksymalną
-  liczbę pustych pól</b>. Kliknij puste pole i wpisz cyfrę (klawiatura), a potem sprawdź lub poproś o rozwiązanie.</p>`, "Opis rozwiązania")}
+  Powtarzamy, aż żadne pole nie da się usunąć: zagadka ma <b>dokładnie jedno rozwiązanie i wiele
+  pustych pól</b> — typowo 55–58 (dla seed 1–8 i 42); „maksimum” jest umowne, bo teoretyczny sufit
+  dla jednoznacznej zagadki jest wyższy (~64). Kliknij puste pole i wpisz cyfrę (klawiatura), a potem
+  sprawdź lub poproś o rozwiązanie.</p>`, "Opis rozwiązania")}
   ${panel(`
   <div class="toolbar">
     <div class="fld">
@@ -970,7 +1128,7 @@ VIEWS.z08 = (view) => {
       <input type="number" id="seed" value="0">
     </div>
     <div class="actions">
-      <button class="btn" id="gen">Generuj</button>
+      <button class="btn" id="gen" type="button">Generuj</button>
       <button class="btn ghost" id="show" type="button">Pokaż rozwiązanie</button>
       <button class="btn ghost" id="clear" type="button">Wyczyść wpisy</button>
       <button class="btn ghost" id="check" type="button">Sprawdź / rozwiąż</button>
@@ -980,9 +1138,9 @@ VIEWS.z08 = (view) => {
   <div id="grid"></div>
   <div class="legend">kliknij puste pole → cyfra 1–9 (Backspace usuwa) · szary = wskazówka, akcent = Twój wpis</div>`, "Zagadka 9×9 (generowana w Go)")}
   ${panel(`
-  <label class="field">Własna plansza: 9 wierszy × 9 cyfr (0 = puste pole)</label>
+  <label class="field" for="own">Własna plansza: 9 wierszy × 9 cyfr (0 = puste pole)</label>
   <textarea id="own" rows="9" style="min-height:150px" placeholder="np. 000700000&#10;000005002&#10;700980003&#10;000000000&#10;010500090&#10;006430805&#10;090650000&#10;004009360&#10;008003010"></textarea>
-  <div class="actions"><button class="btn" id="own-run">Zweryfikuj i rozwiąż</button></div>
+  <div class="actions"><button class="btn" id="own-run" type="button">Zweryfikuj i rozwiąż</button></div>
   <div id="own-out"></div>`)}
   `
   ;
@@ -1038,6 +1196,18 @@ VIEWS.z08 = (view) => {
     }
   };
 
+  // Słuchacz klawiatury wieszanym na dokumencie musi mieć uchwyt:
+  // addEventListener + AbortController, wypinany przy zmianie routu.
+  // (document.body.onkeydown nadpisywał każdy globalny handler i został
+  //  zawieszony na całym dokumencie po wyjściu z widoku.)
+  let keyCtrl = null;
+  const attachKeys = () => {
+    if (keyCtrl) return;
+    keyCtrl = new AbortController();
+    document.addEventListener("keydown", onKey, { signal: keyCtrl.signal });
+    onLeave(() => { keyCtrl.abort(); keyCtrl = null; });
+  };
+
   const gen = async () => {
     const seed = parseInt($("#seed", view).value, 10) || 0;
     $("#stats", view).innerHTML = `<span>generowanie…</span>`;
@@ -1046,13 +1216,13 @@ VIEWS.z08 = (view) => {
       puzzle = r.puzzle.slice();
       userVal = new Array(81).fill(0);
       sel = -1;
-      window.__sol = r.solution;
+      devState.solution = r.solution;
       $("#stats", view).innerHTML =
         `<span>puste pola: <b>${r.blanks}</b> / 81</span>
          <span>wskazówki: <b>${81 - r.blanks}</b></span>
          <span>czas generacji: <b>${r.timeMs} ms</b></span>`;
       drawGrid();
-      document.body.onkeydown = onKey;
+      attachKeys();
     } catch (e) {
       $("#stats", view).innerHTML = banner("err", esc(e.message));
     }
@@ -1060,7 +1230,7 @@ VIEWS.z08 = (view) => {
 
   $("#gen", view).onclick = gen;
   $("#clear", view).onclick = () => { userVal = new Array(81).fill(0); sel = -1; drawGrid(); };
-  $("#show", view).onclick = () => drawGrid(true, window.__sol);
+  $("#show", view).onclick = () => drawGrid(true, devState.solution);
   $("#check", view).onclick = async () => {
     const grid = puzzle.map((v, i) => v || userVal[i]);
     try {

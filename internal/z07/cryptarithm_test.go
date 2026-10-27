@@ -6,7 +6,7 @@ import (
 
 // Przykład z zadania: ABC * BD = EFGAH, m.in. 623 * 29 = 18067.
 func TestExample(t *testing.T) {
-	res, err := Solve("ABC * BD = EFGAH")
+	res, err := Solve("ABC * BD = EFGAH", 0)
 	if err != nil {
 		t.Fatalf("Solve: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestExample(t *testing.T) {
 
 func TestAddition(t *testing.T) {
 	// SEND + MORE = MONEY — klasyczny przykład, 1 rozwiązanie: 9567 + 1085 = 10652
-	res, err := Solve("SEND + MORE = MONEY")
+	res, err := Solve("SEND + MORE = MONEY", 0)
 	if err != nil {
 		t.Fatalf("Solve: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestAddition(t *testing.T) {
 
 func TestDivision(t *testing.T) {
 	// AB / C = DE z dokładnym dzieleniem
-	res, err := Solve("AB / C = DE")
+	res, err := Solve("AB / C = DE", 0)
 	if err != nil {
 		t.Fatalf("Solve: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestErrors(t *testing.T) {
 		"AB1 * C = DE",              // cyfra zamiast litery
 		"ABCDEFGHIJKLMNOP * C = DE", // > 10 liter
 	} {
-		if _, err := Solve(eq); err == nil {
+		if _, err := Solve(eq, 0); err == nil {
 			t.Errorf("Solve(%q) nie zwrócił błędu", eq)
 		}
 	}

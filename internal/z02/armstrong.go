@@ -137,9 +137,14 @@ func chunkSearch(start, end int64, digits int, processed *atomic.Int64, out *[]i
 // Search przeszukuje [0, limit] w poszukiwaniu liczb Armstronga.
 // Wywoływany jest w osobnej gorutynie serwera (job); onTick jest
 // wywoływane ~10 razy na sekundę z aktualnym stanem.
+//
+// Biblioteka przyjmuje każde limit >= 0 (dolny próg 1000 leżał w warstwie
+// HTTP, nie w algorytmie — przeszukanie [0, 100] jest poprawne i tanie,
+// a webowy handler pilnuje własnego minimum, żeby klient nie startował
+// bezsensownie długiego joba).
 func Search(ctx context.Context, limit int64, onTick func(Progress)) (Progress, error) {
-	if limit < 1000 {
-		return Progress{}, fmt.Errorf("limit musi być >= 1000")
+	if limit < 0 {
+		return Progress{}, fmt.Errorf("limit nie może być ujemny, podano %d", limit)
 	}
 	if limit > maxLimit {
 		return Progress{}, fmt.Errorf("limit nie może przekraczać %d", maxLimit)
