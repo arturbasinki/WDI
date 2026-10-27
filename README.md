@@ -144,10 +144,13 @@ Zasady tej warstwy (testowane w `cmd/wdi-server/handlers_test.go`):
   **500**): `AB - CD = EF` ma **476** rozwiązań, `limit=3` zwraca 3 pozycje przy `count: 476`
   i `truncated: true`; `count` jest pełny zawsze, a `limit <= 0` w bibliotece oznacza brak limitu.
 - **z08**: generowane zagadki (np. seed 42: 56 pól pustych) mają dokładnie **jedno** rozwiązanie —
-  weryfikowane niezależnie (Python) i przez zliczacz rozwiązań w Go.
+  weryfikowane niezależnie (Python) i przez zliczacz rozwiązań w Go. UI z08 to **jedna plansza**:
+  generowanie, wpisywanie własnej łamigłówki, sprawdzanie i rozwiązywanie w tym samym miejscu;
+  „Sprawdź” ocenia wpisy bez odkrywania rozwiązania, a „Rozwiąż” wypełnia całą planszę.
 
-Opis rozwiązania każdego zadania znajduje się na jego stronie WWW (panel „Opis rozwiązania”),
-komentarze w kodzie są po polsku, a wyniki można wywołać interaktywnie.
+Opis rozwiązania każdego zadania znajduje się na jego stronie WWW (w z08 jest to zwijany panel
+„Jak działa generator i solver”), komentarze w kodzie są po polsku, a wyniki można wywołać
+interaktywnie.
 
 ---
 

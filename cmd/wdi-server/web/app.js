@@ -1105,170 +1105,575 @@ VIEWS.z07 = (view) => {
 };
 
 /* ==================================================================
-   z08 — sudoku
+   z08 — sudoku: jedna plansza do generowania, wpisywania i rozwiązywania
    ================================================================== */
 
 VIEWS.z08 = (view) => {
   view.innerHTML = `
   <a class="back" href="#/">← wszystkie zadania</a>
   ${taskHead("z08")}
+  <details class="panel sudoku-about">
+    <summary>Jak działa generator i solver</summary>
+    <p class="desc mt8">Generator: (1) losowo wypełnia całą planszę 9×9 <b>backtrackingiem z losową
+    kolejnością kandydatów</b>; (2) „kopie dołki” — pola w losowej kolejności są wycierane, a po każdym
+    usunięciu zliczacz rozwiązań (backtracking + heurystyka MRV, maski bitowe wiersza/kolumny/bloku,
+    przerwanie po 2 rozwiązaniach) sprawdza <b>unikalność</b>. Jeśli unikalność znika — pole wraca.
+    Powtarzamy, aż żadne pole nie da się usunąć: zagadka ma <b>dokładnie jedno rozwiązanie i wiele
+    pustych pól</b> — typowo 55–58 (dla seed 1–8 i 42); „maksimum” jest umowne, bo teoretyczny sufit
+    dla jednoznacznej zagadki jest wyższy (~64). Kliknij puste pole i wpisz cyfrę. <b>Sprawdź</b>
+    ocenia wpisy i podświetla błędy, nie odkrywając rozwiązania; <b>Rozwiąż</b> wypełnia całą planszę.
+    Własną łamigłówkę wpiszesz na tej samej planszy po kliknięciu <b>Pusta plansza</b> — albo wklej
+    gotowe 9 wierszy.</p>
+  </details>
   ${panel(`
-  <p class="desc mt0">Generator: (1) losowo wypełnia całą planszę 9×9 <b>backtrackingiem z losową
-  kolejnością kandydatów</b>; (2) „kopie dołki” — pola w losowej kolejności są wycierane, a po każdym
-  usunięciu zliczacz rozwiązań (backtracking + heurystyka MRV, maski bitowe wiersza/kolumny/bloku,
-  przerwanie po 2 rozwiązaniach) sprawdza <b>unikalność</b>. Jeśli unikalność znika — pole wraca.
-  Powtarzamy, aż żadne pole nie da się usunąć: zagadka ma <b>dokładnie jedno rozwiązanie i wiele
-  pustych pól</b> — typowo 55–58 (dla seed 1–8 i 42); „maksimum” jest umowne, bo teoretyczny sufit
-  dla jednoznacznej zagadki jest wyższy (~64). Kliknij puste pole i wpisz cyfrę (klawiatura), a potem
-  sprawdź lub poproś o rozwiązanie.</p>`, "Opis rozwiązania")}
-  ${panel(`
-  <div class="toolbar">
-    <div class="fld">
-      <label class="field" for="seed">seed (0 = losowy)</label>
-      <input type="number" id="seed" value="0">
+  <div class="sudoku-layout">
+    <div class="sudoku-main">
+      <div class="sudoku-topline">
+        <span class="sudoku-mode" id="mode">Przygotowywanie planszy…</span>
+        <span class="sudoku-kbd-hint">kliknij pole, wpisz 1–9 · strzałki · Backspace usuwa</span>
+      </div>
+      <div id="grid" class="sudoku-host"></div>
+      <div class="sudoku-pad" id="pad" role="group" aria-label="Klawiatura liczb">
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) =>
+          `<button class="pad-key" type="button" data-digit="${d}" aria-label="Wpisz ${d}">${d}</button>`
+        ).join("")}
+        <button class="pad-key pad-del" type="button" data-digit="0" aria-label="Usuń cyfrę z wybranego pola" title="Usuń cyfrę">⌫</button>
+      </div>
+      <div class="legend sudoku-legend">
+        <span><i class="sw given" aria-hidden="true"></i>wskazówka</span>
+        <span><i class="sw user" aria-hidden="true"></i>Twój wpis</span>
+        <span><i class="sw sol" aria-hidden="true"></i>rozwiązanie</span>
+        <span><i class="sw bad" aria-hidden="true"></i>błąd</span>
+      </div>
     </div>
-    <div class="actions">
-      <button class="btn" id="gen" type="button">Generuj</button>
-      <button class="btn ghost" id="show" type="button">Pokaż rozwiązanie</button>
-      <button class="btn ghost" id="clear" type="button">Wyczyść wpisy</button>
-      <button class="btn ghost" id="check" type="button">Sprawdź / rozwiąż</button>
-    </div>
-  </div>
-  <div class="kv" id="stats"></div>
-  <div id="grid"></div>
-  <div class="legend">kliknij puste pole → cyfra 1–9 (Backspace usuwa) · szary = wskazówka, akcent = Twój wpis</div>`, "Zagadka 9×9 (generowana w Go)")}
-  ${panel(`
-  <label class="field" for="own">Własna plansza: 9 wierszy × 9 cyfr (0 = puste pole)</label>
-  <textarea id="own" rows="9" style="min-height:150px" placeholder="np. 000700000&#10;000005002&#10;700980003&#10;000000000&#10;010500090&#10;006430805&#10;090650000&#10;004009360&#10;008003010"></textarea>
-  <div class="actions"><button class="btn" id="own-run" type="button">Zweryfikuj i rozwiąż</button></div>
-  <div id="own-out"></div>`)}
-  `
-  ;
+    <aside class="sudoku-side">
+      <div class="sudoku-block">
+        <h5>Nowa zagadka</h5>
+        <div class="sudoku-seed">
+          <div class="fld">
+            <label class="field" for="seed">ziarno (0 = losowe)</label>
+            <input type="number" id="seed" value="0" inputmode="numeric" autocomplete="off">
+          </div>
+          <button class="btn" id="gen" type="button">Generuj</button>
+        </div>
+        <button class="btn ghost sudoku-wide" id="blank" type="button">Pusta plansza do wpisania</button>
+        <details class="sudoku-import" id="import-box">
+          <summary>Wklej gotową planszę</summary>
+          <p class="sudoku-hint">9 wierszy × 9 cyfr; 0, kropka lub spacja oznaczają puste pole.</p>
+          <textarea id="own" rows="9" spellcheck="false" placeholder="np. 000700000&#10;000005002&#10;700980003&#10;000000000&#10;010500090&#10;006430805&#10;090650000&#10;004009360&#10;008003010"></textarea>
+          <button class="btn ghost small sudoku-wide" id="own-run" type="button">Wczytaj na planszę</button>
+        </details>
+      </div>
+      <div class="sudoku-block">
+        <h5>Sprawdź lub rozwiąż</h5>
+        <div class="sudoku-actions">
+          <button class="btn ghost" id="check" type="button" title="Ocenia wpisy i podświetla błędy, nie odkrywa rozwiązania">Sprawdź</button>
+          <button class="btn" id="solve" type="button" title="Wypełnia całą planszę rozwiązaniem">Rozwiąż</button>
+          <button class="btn ghost sudoku-wide" id="clear" type="button">Wyczyść wpisy</button>
+        </div>
+        <p class="sudoku-hint"><b>Sprawdź</b> nie odkrywa rozwiązania — tylko ocenia wpisy.
+        <b>Rozwiąż</b> wypełnia całą planszę.</p>
+      </div>
+      <div class="sudoku-block">
+        <h5>Stan planszy</h5>
+        <div class="sudoku-meta" id="meta"></div>
+        <div class="sudoku-status" id="status" role="status" aria-live="polite"></div>
+      </div>
+    </aside>
+  </div>`, "Sudoku 9×9")}
+  `;
 
-  let puzzle = new Array(81).fill(0);
-  let userVal = new Array(81).fill(0);
-  let sel = -1;
+  const gridHost = $("#grid", view);
+  const statusEl = $("#status", view);
+  const metaEl = $("#meta", view);
+  const modeEl = $("#mode", view);
 
-  const drawGrid = (showSol = false, solution = null) => {
-    let html = `<div class="sudoku">`;
+  let givens = new Array(81).fill(0);     // wskazówki wygenerowanej zagadki
+  let entries = new Array(81).fill(0);    // wpisy użytkownika (własna plansza: wskazówki)
+  let revealed = new Array(81).fill(0);   // rozwiązanie pokazane przez „Rozwiąż”
+  let known = null;                       // znane rozwiązanie wygenerowanej zagadki
+  let source = "manual";                  // "generated" | "manual"
+  let genTime = 0;
+  let lastSeed = 0;
+  let selected = 0;
+  const wrong = new Set();
+  const right = new Set();
+  let busy = false;
+  let disposed = false;
+
+  const count = (arr) => arr.reduce((n, x) => n + (x ? 1 : 0), 0);
+  const isGiven = (i) => givens[i] !== 0;
+  const isEditable = (i) => !isGiven(i) && revealed[i] === 0;
+  const valueAt = (i) => givens[i] || revealed[i] || entries[i] || 0;
+  const firstEditable = () => {
+    for (let i = 0; i < 81; i++) if (isEditable(i)) return i;
+    return -1;
+  };
+  const boardGrid = () => givens.map((g, i) => g || entries[i] || 0);
+  const hasBoard = () => givens.some(Boolean) || entries.some(Boolean);
+  const hasEntries = () => entries.some(Boolean);
+  const allFilled = () => {
+    for (let i = 0; i < 81; i++) if (!valueAt(i)) return false;
+    return true;
+  };
+  const wpisy = (n) => {
+    if (n === 1) return "wpis";
+    const d = n % 10, h = n % 100;
+    if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return "wpisy";
+    return "wpisów";
+  };
+
+  const setStatus = (kind, html) => {
+    statusEl.innerHTML = kind ? banner(kind, html) : "";
+  };
+
+  const duplicateCells = (grid) => {
+    const groups = [];
+    for (let r = 0; r < 9; r++) {
+      const g = [];
+      for (let c = 0; c < 9; c++) g.push(r * 9 + c);
+      groups.push(g);
+    }
+    for (let c = 0; c < 9; c++) {
+      const g = [];
+      for (let r = 0; r < 9; r++) g.push(r * 9 + c);
+      groups.push(g);
+    }
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 3; bc++) {
+        const g = [];
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < 3; c++) g.push((br * 3 + r) * 9 + bc * 3 + c);
+        }
+        groups.push(g);
+      }
+    }
+    const bad = new Set();
+    for (const g of groups) {
+      const byValue = new Map();
+      for (const i of g) {
+        const val = grid[i];
+        if (!val) continue;
+        if (!byValue.has(val)) byValue.set(val, []);
+        byValue.get(val).push(i);
+      }
+      for (const arr of byValue.values()) {
+        if (arr.length > 1) arr.forEach((i) => bad.add(i));
+      }
+    }
+    return [...bad];
+  };
+
+  const refreshActions = () => {
+    const hasE = hasEntries();
+    const hasB = hasBoard();
+    const hasRevealed = revealed.some(Boolean);
+    const canEdit = firstEditable() >= 0;
+    $("#gen", view).disabled = busy;
+    $("#blank", view).disabled = busy;
+    $("#own-run", view).disabled = busy;
+    $("#seed", view).disabled = busy;
+    $("#check", view).disabled = busy || !hasE || hasRevealed;
+    $("#solve", view).disabled = busy || !hasB || hasRevealed;
+    $("#clear", view).disabled = busy || (!hasE && !hasRevealed);
+    $$(".pad-key", view).forEach((b) => { b.disabled = busy || !canEdit; });
+  };
+
+  const setBusy = (b) => {
+    busy = b;
+    view.setAttribute("aria-busy", b ? "true" : "false");
+    refreshActions();
+  };
+
+  const updateMeta = () => {
+    const g = count(givens);
+    const e = count(entries);
+    const hasRevealed = revealed.some(Boolean);
+    const blanks = 81 - g - e;
+    const bits = [];
+    if (source === "generated") bits.push(`wskazówki: <b>${g}</b>`);
+    bits.push(`${source === "generated" ? "Twoje wpisy" : "wpisy"}: <b>${e}</b>`);
+    bits.push(`puste: <b>${hasRevealed ? 0 : blanks}</b>`);
+    if (genTime) bits.push(`generacja: <b>${genTime} ms</b>`);
+    if (hasRevealed) bits.push(`rozwiązanie: <b>pokazane</b>`);
+    metaEl.innerHTML = bits
+      .map((b) => `<span>${b}</span>`)
+      .join(`<span class="sep" aria-hidden="true">·</span>`);
+
+    const mode = [source === "generated" ? "Zagadka wygenerowana" : "Własna plansza"];
+    if (source === "generated") mode.push(lastSeed ? `ziarno ${lastSeed}` : "ziarno losowe");
+    if (hasRevealed) mode.push("rozwiązanie");
+    modeEl.textContent = mode.join(" · ");
+  };
+
+  const drawGrid = ({ focus = false } = {}) => {
+    const selVal = selected >= 0 ? valueAt(selected) : 0;
+    const selRow = selected >= 0 ? Math.floor(selected / 9) : -1;
+    const selCol = selected >= 0 ? selected % 9 : -1;
+    let html = `<div class="sudoku" role="group" aria-label="Plansza sudoku 9 na 9">`;
     for (let i = 0; i < 81; i++) {
       const r = Math.floor(i / 9), c = i % 9;
       const classes = ["cell"];
       if (c === 2 || c === 5) classes.push("boxr");
       if (r === 2 || r === 5) classes.push("boxb");
-      let v = userVal[i];
-      let cls = "";
-      if (showSol && solution && solution[i]) {
-        v = solution[i];
-        cls = "sol";
-      } else if (puzzle[i]) {
-        v = puzzle[i];
-        cls = "given";
-      } else if (v) {
-        cls = "user";
+
+      const given = isGiven(i);
+      const sol = !given && revealed[i] !== 0;
+      const val = valueAt(i);
+      if (given) classes.push("given");
+      else if (sol) classes.push("sol");
+      else if (entries[i]) classes.push("user");
+      if (!given && !sol) classes.push("editable");
+      if (i === selected) classes.push("sel");
+
+      if (selected >= 0 && i !== selected) {
+        const sameBox = Math.floor(r / 3) === Math.floor(selRow / 3) &&
+          Math.floor(c / 3) === Math.floor(selCol / 3);
+        if (r === selRow || c === selCol || sameBox) classes.push("peer");
+        if (selVal && val === selVal) classes.push("same");
       }
-      if (i === sel && !puzzle[i]) classes.push("sel");
-      html += `<div class="${classes.concat(cls).join(" ")}" data-i="${i}">${v || ""}</div>`;
+      if (!sol && wrong.has(i)) classes.push("bad");
+      if (!sol && right.has(i)) classes.push("right");
+
+      let label = `Wiersz ${r + 1}, kolumna ${c + 1}: ${val || "puste pole"}`;
+      if (given) label += ", wskazówka";
+      else if (sol) label += ", rozwiązanie";
+      else if (entries[i]) label += ", wpis";
+      if (!sol && wrong.has(i)) label += ", błędny wpis";
+      else if (!sol && right.has(i)) label += ", poprawny wpis";
+
+      html += `<button type="button" class="${classes.join(" ")}" data-i="${i}" ` +
+        `tabindex="${i === selected ? 0 : -1}" aria-label="${esc(label)}">${val || ""}</button>`;
     }
     html += `</div>`;
-    $("#grid", view).innerHTML = html;
-    $$("#grid .cell", view).forEach((el) => {
-      el.onclick = () => {
-        const i = parseInt(el.dataset.i, 10);
-        if (!puzzle[i]) { sel = i; drawGrid(); }
-      };
-    });
+
+    const hadFocus = gridHost.contains(document.activeElement);
+    gridHost.innerHTML = html;
+    if ((focus || hadFocus) && selected >= 0) {
+      const el = $(`.cell[data-i="${selected}"]`, gridHost);
+      if (el) el.focus({ preventScroll: true });
+    }
+  };
+
+  const applyDigit = (d) => {
+    if (busy) return;
+    if (selected < 0) selected = firstEditable();
+    if (selected < 0) return;
+    if (!isEditable(selected)) {
+      setStatus("info", "To pole jest wskazówką lub fragmentem rozwiązania — wybierz puste pole.");
+      return;
+    }
+    entries[selected] = d;
+    wrong.clear();
+    right.clear();
+    setStatus(null, "");
+    updateMeta();
+    drawGrid({ focus: true });
+    refreshActions();
   };
 
   const onKey = (e) => {
-    if (sel < 0) return;
+    if (busy || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t instanceof Element) {
+      if (t.closest("input, textarea, select, a, summary")) return;
+      if (t.closest("button") && !t.closest("#grid")) return;
+    }
     if (e.key >= "1" && e.key <= "9") {
-      userVal[sel] = parseInt(e.key, 10);
-      sel = -1;
+      e.preventDefault();
+      applyDigit(parseInt(e.key, 10));
+      return;
+    }
+    if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") {
+      e.preventDefault();
+      applyDigit(0);
+      return;
+    }
+    if (e.key === "Escape") {
+      selected = -1;
       drawGrid();
-    } else if (e.key === "Backspace" || e.key === "Delete") {
-      userVal[sel] = 0;
-      sel = -1;
-      drawGrid();
-    } else if (e.key === "Escape") {
-      sel = -1;
-      drawGrid();
+      refreshActions();
+      return;
+    }
+    if (selected < 0) {
+      if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      e.preventDefault();
+      selected = firstEditable();
+      if (selected < 0) return;
+      drawGrid({ focus: true });
+      refreshActions();
+      return;
+    }
+    let dr = 0, dc = 0;
+    if (e.key === "ArrowUp") dr = -1;
+    else if (e.key === "ArrowDown") dr = 1;
+    else if (e.key === "ArrowLeft") dc = -1;
+    else if (e.key === "ArrowRight") dc = 1;
+    if (dr || dc) {
+      e.preventDefault();
+      const r = Math.floor(selected / 9), c = selected % 9;
+      const nr = Math.min(8, Math.max(0, r + dr));
+      const nc = Math.min(8, Math.max(0, c + dc));
+      if (nr === r && nc === c) return;
+      selected = nr * 9 + nc;
+      drawGrid({ focus: true });
+      refreshActions();
     }
   };
 
-  // Słuchacz klawiatury wieszanym na dokumencie musi mieć uchwyt:
-  // addEventListener + AbortController, wypinany przy zmianie routu.
-  // (document.body.onkeydown nadpisywał każdy globalny handler i został
-  //  zawieszony na całym dokumencie po wyjściu z widoku.)
-  let keyCtrl = null;
-  const attachKeys = () => {
-    if (keyCtrl) return;
-    keyCtrl = new AbortController();
-    document.addEventListener("keydown", onKey, { signal: keyCtrl.signal });
-    onLeave(() => { keyCtrl.abort(); keyCtrl = null; });
-  };
+  const keyCtrl = new AbortController();
+  document.addEventListener("keydown", onKey, { signal: keyCtrl.signal });
+  onLeave(() => {
+    disposed = true;
+    keyCtrl.abort();
+    view.removeAttribute("aria-busy");
+  });
+
+  gridHost.addEventListener("click", (e) => {
+    const cell = e.target.closest(".cell");
+    if (!cell || !gridHost.contains(cell)) return;
+    selected = parseInt(cell.dataset.i, 10);
+    if (Number.isNaN(selected)) return;
+    drawGrid({ focus: true });
+    refreshActions();
+  });
+
+  $$(".pad-key", view).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (busy) return;
+      if (selected < 0) selected = firstEditable();
+      if (selected < 0) {
+        setStatus("warn", "Brak pustych pól — wyczyść wpisy lub wygeneruj nową zagadkę.");
+        return;
+      }
+      if (!isEditable(selected)) {
+        setStatus("info", "To pole jest wskazówką lub fragmentem rozwiązania — wybierz puste pole.");
+        return;
+      }
+      applyDigit(parseInt(btn.dataset.digit, 10));
+    });
+  });
 
   const gen = async () => {
+    if (busy) return;
     const seed = parseInt($("#seed", view).value, 10) || 0;
-    $("#stats", view).innerHTML = `<span>generowanie…</span>`;
+    lastSeed = seed;
+    setBusy(true);
+    modeEl.textContent = "Generowanie zagadki…";
+    setStatus("info", "Generowanie zagadki…");
     try {
       const r = await api("POST", "/api/z08/generate", { seed });
-      puzzle = r.puzzle.slice();
-      userVal = new Array(81).fill(0);
-      sel = -1;
+      if (disposed) return;
+      givens = r.puzzle.slice();
+      entries = new Array(81).fill(0);
+      revealed = new Array(81).fill(0);
+      known = r.solution.slice();
+      source = "generated";
+      genTime = r.timeMs;
+      wrong.clear();
+      right.clear();
+      selected = firstEditable();
+      if (selected < 0) selected = 0;
       devState.solution = r.solution;
-      $("#stats", view).innerHTML =
-        `<span>puste pola: <b>${r.blanks}</b> / 81</span>
-         <span>wskazówki: <b>${81 - r.blanks}</b></span>
-         <span>czas generacji: <b>${r.timeMs} ms</b></span>`;
+      setStatus("ok", `Zagadka gotowa: <b>${r.blanks}</b> pustych pól i <b>${81 - r.blanks}</b> wskazówek. Kliknij puste pole i wpisz cyfrę.`);
+      updateMeta();
       drawGrid();
-      attachKeys();
     } catch (e) {
-      $("#stats", view).innerHTML = banner("err", esc(e.message));
+      if (!disposed) {
+        if (hasBoard()) {
+          updateMeta();
+        } else {
+          modeEl.textContent = "Plansza niedostępna";
+          drawGrid();
+        }
+        setStatus("err", esc(e.message));
+      }
+    } finally {
+      if (!disposed) setBusy(false);
+    }
+  };
+
+  const blank = () => {
+    if (busy) return;
+    givens = new Array(81).fill(0);
+    entries = new Array(81).fill(0);
+    revealed = new Array(81).fill(0);
+    known = null;
+    source = "manual";
+    genTime = 0;
+    wrong.clear();
+    right.clear();
+    selected = 0;
+    setStatus("info", "Pusta plansza — wpisz wskazówki własnej łamigłówki (kliknij pole i wybierz cyfrę).");
+    updateMeta();
+    drawGrid({ focus: true });
+    refreshActions();
+  };
+
+  const importGrid = () => {
+    if (busy) return;
+    const text = $("#own", view).value;
+    const digits = [];
+    for (const ch of text) {
+      if (ch >= "1" && ch <= "9") digits.push(parseInt(ch, 10));
+      else if (ch === "0" || ch === ".") digits.push(0);
+    }
+    if (digits.length !== 81) {
+      setStatus("err", `Potrzebne są dokładnie 81 cyfr (9 wierszy × 9), a wykryto <b>${digits.length}</b>.`);
+      return;
+    }
+    givens = new Array(81).fill(0);
+    entries = digits.slice();
+    revealed = new Array(81).fill(0);
+    known = null;
+    source = "manual";
+    genTime = 0;
+    wrong.clear();
+    right.clear();
+    const firstEmpty = entries.findIndex((v) => !v);
+    selected = firstEmpty >= 0 ? firstEmpty : 0;
+    $("#import-box", view).open = false;
+    setStatus("ok", "Wczytano planszę. Możesz ją sprawdzić lub rozwiązać.");
+    updateMeta();
+    drawGrid({ focus: true });
+    refreshActions();
+  };
+
+  const clearEntries = () => {
+    if (busy) return;
+    const manual = source === "manual";
+    entries = new Array(81).fill(0);
+    revealed = new Array(81).fill(0);
+    wrong.clear();
+    right.clear();
+    selected = firstEditable();
+    if (selected < 0) selected = 0;
+    setStatus("info", manual
+      ? "Wyczyszczono planszę — wpisz własne wskazówki."
+      : "Wyczyszczono wpisy. Wskazówki zagadki zostały na planszy.");
+    updateMeta();
+    drawGrid({ focus: true });
+    refreshActions();
+  };
+
+  const check = async () => {
+    if (busy || !hasEntries()) return;
+
+    if (source === "generated" && known) {
+      wrong.clear();
+      right.clear();
+      let correct = 0;
+      entries.forEach((v, i) => {
+        if (!v) return;
+        if (v === known[i]) {
+          right.add(i);
+          correct++;
+        } else {
+          wrong.add(i);
+        }
+      });
+      const total = count(entries);
+      const bad = wrong.size;
+      if (!bad) {
+        setStatus("ok", allFilled()
+          ? `Plansza jest rozwiązana poprawnie — <b>${total}</b> ${wpisy(total)}.`
+          : `Wszystkie wpisy poprawne: <b>${total}</b>. Uzupełnij pozostałe pola albo kliknij <b>Rozwiąż</b>.`);
+      } else {
+        setStatus("err", `Błędnych wpisów: <b>${bad}</b> z ${total} (podświetlone na czerwono). Poprawnych: <b>${correct}</b>.`);
+      }
+      updateMeta();
+      drawGrid();
+      refreshActions();
+      return;
+    }
+
+    setBusy(true);
+    setStatus("info", "Sprawdzanie planszy…");
+    const grid = boardGrid();
+    try {
+      const r = await api("POST", "/api/z08/solve", { grid });
+      if (disposed) return;
+      wrong.clear();
+      right.clear();
+      if (!r.solved) {
+        duplicateCells(grid).forEach((i) => wrong.add(i));
+        setStatus("err", wrong.size
+          ? `Plansza nie ma rozwiązania. Sprzeczne pola: <b>${wrong.size}</b> (podświetlone na czerwono).`
+          : "Plansza nie ma rozwiązania — sprawdź wpisane cyfry.");
+      } else if (r.count === 1) {
+        entries.forEach((v, i) => { if (v) right.add(i); });
+        setStatus("ok", allFilled()
+          ? `Plansza jest rozwiązana poprawnie — <b>${count(entries)}</b> ${wpisy(count(entries))}.`
+          : `Wpisy są poprawne: <b>${count(entries)}</b> ${wpisy(count(entries))}. Plansza ma <b>jedno</b> rozwiązanie.`);
+      } else {
+        const cnt = r.capped ? "≥" + r.count : String(r.count);
+        setStatus("warn", `Plansza ma <b>${cnt}</b> rozwiązań — nie da się jednoznacznie ocenić wpisów. Dodaj więcej wskazówek.`);
+      }
+      updateMeta();
+      drawGrid();
+    } catch (e) {
+      if (!disposed) setStatus("err", esc(e.message));
+    } finally {
+      if (!disposed) setBusy(false);
+    }
+  };
+
+  const solve = async () => {
+    if (busy || !hasBoard()) return;
+    setBusy(true);
+    setStatus("info", "Rozwiązywanie…");
+    const grid = source === "generated" ? givens.slice() : boardGrid();
+    try {
+      const r = await api("POST", "/api/z08/solve", { grid });
+      if (disposed) return;
+      wrong.clear();
+      right.clear();
+      if (!r.solved) {
+        duplicateCells(grid).forEach((i) => wrong.add(i));
+        setStatus("err", "Ta plansza nie ma rozwiązania. Sprawdź wpisy" +
+          (wrong.size ? " — sprzeczne pola są podświetlone." : "."));
+      } else {
+        let badEntries = 0;
+        if (source === "generated") {
+          entries.forEach((v, i) => { if (v && v !== r.solution[i]) badEntries++; });
+          entries = new Array(81).fill(0);
+          known = r.solution.slice();
+          devState.solution = r.solution;
+        }
+        revealed = r.solution.slice();
+        if (r.count === 1) {
+          setStatus(badEntries ? "warn" : "ok", badEntries
+            ? `Rozwiązanie pokazane. Błędnych wpisów: <b>${badEntries}</b> — zastąpiono je poprawnymi.`
+            : `Rozwiązanie znalezione w <b>${r.timeMs} ms</b>.`);
+        } else {
+          const cnt = r.capped ? "≥" + r.count : String(r.count);
+          setStatus("warn", `Plansza ma <b>${cnt}</b> rozwiązań — pokazano jedno z nich` +
+            (badEntries ? `; błędnych wpisów: <b>${badEntries}</b>` : "") + ".");
+        }
+      }
+      updateMeta();
+      drawGrid();
+      refreshActions();
+    } catch (e) {
+      if (!disposed) setStatus("err", esc(e.message));
+    } finally {
+      if (!disposed) setBusy(false);
     }
   };
 
   $("#gen", view).onclick = gen;
-  $("#clear", view).onclick = () => { userVal = new Array(81).fill(0); sel = -1; drawGrid(); };
-  $("#show", view).onclick = () => drawGrid(true, devState.solution);
-  $("#check", view).onclick = async () => {
-    const grid = puzzle.map((v, i) => v || userVal[i]);
-    try {
-      const r = await api("POST", "/api/z08/solve", { grid });
-      if (r.solved) {
-        const mine = grid.filter((v, i) => !puzzle[i] && v).length;
-        const correct = grid.filter((v, i) => !puzzle[i] && v && r.solution[i] === v).length;
-        $("#stats", view).innerHTML =
-          banner("ok", `Plansza ma <b>${r.capped ? "≥" + r.count : r.count}</b> ${r.count === 1 ? "rozwiązanie" : "rozwiązań"} (czas: ${r.timeMs} ms).`) +
-          (mine ? `<div class="kv"><span>Twoje wpisy: <b>${mine}</b>, zgodne z rozwiązaniem: <b>${correct}</b></span></div>` : "");
-        drawGrid(true, r.solution);
-      } else {
-        $("#stats", view).innerHTML = banner("err", "Plansza <b>nie ma żadnego rozwiązania</b> — sprawdź wpisane cyfry.");
-      }
-    } catch (e) {
-      $("#stats", view).innerHTML = banner("err", esc(e.message));
+  $("#blank", view).onclick = blank;
+  $("#own-run", view).onclick = importGrid;
+  $("#clear", view).onclick = clearEntries;
+  $("#check", view).onclick = check;
+  $("#solve", view).onclick = solve;
+  $("#seed", view).addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      gen();
     }
-  };
+  });
 
-  $("#own-run", view).onclick = async () => {
-    const lines = $("#own", view).value.trim().split(/\s+/);
-    const grid = [];
-    for (const ln of lines) for (const ch of ln) if (/[0-9]/.test(ch)) grid.push(parseInt(ch, 10));
-    try {
-      const r = await api("POST", "/api/z08/solve", { grid });
-      let html;
-      if (r.solved) {
-        html = banner("ok", `Rozwiązań: <b>${r.capped ? "≥" + r.count : r.count}</b> (czas: ${r.timeMs} ms).`) +
-          `<div class="kv"><span>rozwiązanie (wierszami):</span></div>
-           <div class="mono mt8" style="line-height:1.9;white-space:pre">${r.solution.map((v, i) => (i % 9 === 0 ? "\n" : "") + v).join("")}</div>`;
-      } else {
-        html = banner("warn", "Ta plansza <b>nie ma rozwiązania</b>.");
-      }
-      $("#own-out", view).innerHTML = html;
-    } catch (e) {
-      $("#own-out", view).innerHTML = banner("err", esc(e.message));
-    }
-  };
-
+  refreshActions();
   gen();
 };
