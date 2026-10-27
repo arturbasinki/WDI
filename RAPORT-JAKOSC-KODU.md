@@ -139,3 +139,47 @@ Pokrycie testami (`go test -cover`): z01 88,1% · z02 88,3% · z03 95,5% · z04 
 | Testy regresji dodane | 9 testów w 6 plikach | — | — |
 
 **Stan końcowy: repozytorium poprawne, pełny zestaw `-race` czysty, obraz buduje się i działa, wszystkie wektory awarii zablokowane testami regresji.** Zalecane następne kroki: punkty P1 z rozdziału 5 (wyciek `jobStore`, mutex `cancel`, limit jobów, czyszczenie timerów frontendu) oraz pipeline CI.
+
+## 9. Briefing dla sesji naprawczej (do zlecenia w nowym oknie)
+
+Powyższy raport opisuje CO i DLACZEGO naprawić; ta sekcja dodaje JAK, żeby nowy agent nie musiał odkrywać środowiska od zera.
+
+### 9.1 Kontekst środowiska (nieoczywisty, a blokujący)
+
+```bash
+# KAŻDY polecenie Go w tym workspace wymaga (sandbox: ~ jest tylko do odczytu):
+export GOCACHE=$PWD/.gocache GOPATH=$PWD/.gopath
+# Docker CLI potrzebuje zapisywalnego HOME:
+HOME=$PWD/.home docker build ...   # analogicznie compose, run, images
+```
+
+- **Nigdy `gofmt -l .` w katalogu głównym** — przeszuka `.gopath/pkg/mod` (toolchain + moduły narzędzi, setki plików, pliki testowe celowo nieparsowalne → exit 2). Zawsze `gofmt -l cmd internal`.
+- **Port 8080 na tym hoście należy do obcego kontenera** (`simple-social-app`, JWT). Nie odpytywać 8080, nie startować compose na 8080 (bind conflict). Testy live: `go build -o bin/wdi-server ./cmd/wdi-server && PORT=8099 ./bin/wdi-server` (job w tle) albo `docker run -d -p 127.0.0.1:8099:8080 wdi:latest`.
+- Narzędzia weryfikacyjne UI (gitignore, istnieją w `.verify/`): `bash .verify/shot.sh <plik.png> "#/trasa" [js] [ms]` — zrzut strony przez CDP/Chromium; wymaga `TMPDIR=$PWD/.verify/tmp XDG_RUNTIME_DIR=$PWD/.verify/tmp AGENT_BROWSER_ARGS="--no-sandbox"` i wszystkiego w jednym wywołaniu bash (die-with-parent).
+- `staticcheck` niedostępny (brak Go proxy) — bramka jakości to `gofmt + go vet + go test -race`.
+
+### 9.2 Constraints projektu (nie naruszać)
+
+- **Tylko biblioteka standardowa Go** — zero zależności; frontend czysty JS/CSS (bez frameworków, bundlerów).
+- UI i komentarze po polsku; `go.mod` `go 1.25.6` (uwaga: `math.IsFinite` NIE istnieje w 1.25 — używać `IsNaN/IsInf`).
+- Commit **wyłącznie na wyraźne życzenie użytkownika**; drzewo startowe: czyste, `96d3780`.
+- Zmiany API → aktualizacja `README.md` (sekcja „Zweryfikowane wyniki" jest tablicą prawdy weryfikowaną przez API — nie wolno jej rozjechać).
+
+### 9.3 Kolejność pracy i kryteria akceptacji P1
+
+| # | Zadanie | Kryterium akceptacji |
+|---|---|---|
+| 1 | Mutex wokół `job.cancel` (main.go, typ `job`) | `go test -race` z testem równoległego `POST+DELETE`; zielone |
+| 2 | `jobStore`: TTL od zakończenia (np. 15 min) + cap liczby (np. 200), usuwanie przy przekroczeniu | test jednostkowy: 500 zakończonych jobów → `len(store)` ograniczone; GET po czystce → 404 |
+| 3 | DELETE na jobie zakończonym → 409 (lub no-op ze statusem), nie „cancelling" | test `httptest` |
+| 4 | Synchroniczna walidacja parametrów w POST (400 przed utworzeniem joba); spójny `maxLimit` API = UI (1e12) | `POST {"limit":1e13}` → 400 przy POST, nie 202+późny błąd |
+| 5 | semafor jednoczesnych jobów (np. 2; nadmiar → 429) | 6× `POST z02 limit=1e11` → ≤2 `running`, reszta 429; test |
+| 6 | graceful shutdown (`signal.Notify` SIGTERM/SIGINT + `http.Server.Shutdown`) | `docker stop` kończy kontener < 10 s, exit 0; joby anulowane |
+| 7 | frontend: disposer dla `playTimer` i `document.body.onkeydown` przy zmianie routu; DELETE jobu przy odjeździe z routu; poller: błąd `fetch` → komunikat, próby ponowne | ręcznie+skrypt: wejść w z01, odtworzyć, natychmiast zmienić rout → brak tykających interwałów (lista disposerów w rejestrze routu); zerwany serwer w trakcie pollingu → widoczny błąd |
+| 8 | WCAG: `--muted-2` → `#8a97ab`; `for` w labelach; `type="button"`; ARIA `role="progressbar"` | kontrast ≥ 4,5:1 (kalkulator), `grep -c '<label'` = `grep -c 'for='` |
+
+**Bramka końcowa każdej naprawy:** `gofmt -l cmd internal` pusto · `go vet ./...` · `go test -race -count=1 ./...` · `node --check cmd/wdi-server/web/app.js` · rebuild obrazu + probe live na **8099** (`/api/tasks` 8 zadań, z01 n=100 ≈ 1,2 MB, z06 10⁶ „(” → 400, Armstrong 41). Nowe zachowania API — testy w `cmd/wdi-server` (dziś brak plików testowych warstwy HTTP: `go test ./cmd/...` mówi „no test files" — to też warto nadrobić przy punktach 3/4).
+
+### 9.4 Co już jest zrobione (żeby nie naprawiać podwójnie)
+
+Wszystko z rozdz. 3 — commit `9dca463`: 5 krytycznych + 8 wysokich + docs + Docker/compose/README. Testy regresji: `param_test.go`, `stepsbudget_test.go` (z01), `cancel_test.go` (z02), `order_test.go` (z03), `depth_test.go` (z06), `leadingzero_test.go` (z07), `seed_test.go` (z08), `isConsistent` naprawiony (z08).
