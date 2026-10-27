@@ -1,0 +1,14 @@
+# decisions
+
+* [Block-wise digit-power search](/decisions/blockwise-digit-power-search.md) - Search narcissistic numbers in blocks of ten sharing a leading part, computing the digit-power sum once per block, parallelised across cores to reach 10^12.
+* [Cancellation inside the measured loop](/decisions/cancellation-inside-measurement.md) - Check cancellation inside sieve loops once per 2^20 iterations (mask test), including the initialisation pass, so the slowest measurement is interruptible in a fraction of a second.
+* [Job context detached from the request](/decisions/detached-job-context.md) - A job's cancellation is detached from the HTTP request that created it, so long computations survive connection churn and end only on deliberate cancellation.
+* [Content embedded in the artifact](/decisions/embedded-content.md) - Compile the reference texts, the dictionary and the frontend into the deployed artifact, so canonical answers need no data files, paths or configuration.
+* [Lazy job retention, no timers](/decisions/lazy-retention-no-timers.md) - Retain finished jobs for 15 minutes and at most 200, sweeping lazily on registry access with an injectable clock, instead of running background timers.
+* [Loopback-only publication on host port 8099](/decisions/loopback-port-publication.md) - Publish the container's port on the loopback interface only and map the container's 8080 to host port 8099, because 8080 is occupied on this host.
+* [Two-stage reproducible image](/decisions/multistage-image.md) - Build a two-stage, offline-reproducible container image whose runtime stage carries only the static executable, runs non-root, and declares the healthcheck in the image.
+* [Numeric asymptote detection and real clamping](/decisions/numeric-asymptote-detection.md) - Detect vertical asymptotes numerically from the sample distribution (median + 15·IQR, 4·IQR jump, non-finite adjacency), segment the curve at them, and clamp outliers instead of dropping them.
+* [Task catalog as the single source](/decisions/single-source-task-catalog.md) - Make the serving-layer task registry the only source of task titles and blurbs; the frontend keeps only a route-to-view mapping.
+* [Standard-library-only, single binary](/decisions/stdlib-only-single-binary.md) - Implement all eight tasks and the serving layer on the standard library alone, shipped as one self-contained executable, replacing every third-party library with first-party code.
+* [Test cost budget](/decisions/test-cost-budget.md) - Budget test cost: heavy numeric cases are short-mode-skipped, HTTP tests stub the heavy computations, and timing tests use an injected clock, keeping the race-enabled suite in seconds.
+* [Uniqueness-proven digging for sudoku](/decisions/unique-solution-digging.md) - Generate sudoku by randomized fill then random-order digging, keeping a removal only when a count-to-two proves uniqueness; uniqueness is guaranteed, maximality is not.
